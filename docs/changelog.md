@@ -1,6 +1,9 @@
 ---
 sidebarDepth: 0
 ---
+## 4.0.8
+* Fix support for namespace checks
+
 ## 4.0.7
 * Fix goreleaser format
 
