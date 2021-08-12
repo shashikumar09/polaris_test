@@ -169,6 +169,7 @@ func applyControllerSchemaChecks(conf *config.Configuration, resourceProvider *k
 	}
 	for _, container := range resource.PodSpec.Containers {
 		results, err := applyContainerSchemaChecks(conf, resourceProvider, resource, &container, false)
+		results1, err1 : = applyDynamicChecks(conf)
 		if err != nil {
 			return finalResult, err
 		}
@@ -202,6 +203,16 @@ func applyPodSchemaChecks(conf *config.Configuration, resources *kube.ResourcePr
 	return applySchemaChecks(conf, test)
 }
 
+func applyDynamicChecks(conf *config.Configuration) (ResultSet, error) {
+	results := {}
+	result, err := applyDynamicCheck(conf)
+	if err != nil {
+		return results, err
+		}
+
+	}
+}
+
 func applyContainerSchemaChecks(conf *config.Configuration, resources *kube.ResourceProvider, controller kube.GenericResource, container *corev1.Container, isInit bool) (ResultSet, error) {
 	test := schemaTestCase{
 		Target:           config.TargetContainer,
@@ -224,8 +235,14 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 		if result != nil {
 			results[checkID] = *result
 		}
+
 	}
 	return results, nil
+}
+
+func applyDynamicCheck(conf *config.Configuration) (*ResultMessage, error) {
+	passses, issues, err = check.DynamicCheckContainer("test")
+	return {}, nil
 }
 
 func applySchemaCheck(conf *config.Configuration, checkID string, test schemaTestCase) (*ResultMessage, error) {

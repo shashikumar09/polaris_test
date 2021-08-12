@@ -1,5 +1,7 @@
 package config
 
+import  "fmt"
+
 import (
 	"github.com/gobuffalo/packr/v2"
 	"github.com/sirupsen/logrus"
@@ -46,6 +48,7 @@ var (
 func init() {
 	schemaBox = packr.New("Schemas", "../../checks")
 	for _, checkID := range checkOrder {
+		fmt.Println(checkID)
 		contents, err := schemaBox.Find(checkID + ".yaml")
 		if err != nil {
 			panic(err)
@@ -55,6 +58,7 @@ func init() {
 			logrus.Errorf("Error while parsing check %s", checkID)
 			panic(err)
 		}
+		fmt.Println(check)
 		BuiltInChecks[checkID] = check
 	}
 }
