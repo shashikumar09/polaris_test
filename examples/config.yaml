@@ -1,32 +1,45 @@
 checks:
   # reliability
-  multipleReplicasForDeployment: ignore
-  priorityClassNotSet: ignore
-  tagNotSpecified: danger
-  pullPolicyNotAlways: warning
   readinessProbeMissing: warning
   livenessProbeMissing: warning
-  metadataAndNameMismatched: ignore
   pdbDisruptionsIsZero: warning
-  missingPodDisruptionBudget: ignore
+  missingPodDisruptionBudget: danger
 
-  # efficiency
   cpuRequestsMissing: warning
   cpuLimitsMissing: warning
   memoryRequestsMissing: warning
   memoryLimitsMissing: warning
-  # security
-  hostIPCSet: danger
-  hostPIDSet: danger
-  notReadOnlyRootFilesystem: warning
-  privilegeEscalationAllowed: danger
-  runAsRootAllowed: warning
-  runAsPrivileged: danger
-  dangerousCapabilities: danger
-  insecureCapabilities: warning
-  hostNetworkSet: warning
-  hostPortSet: warning
-  tlsSettingsMissing: warning
+  topologySpreadConstraints: warning
+
+
+
+customChecks:
+  topologySpreadConstraints:
+    successMessage: Topology spread constraints is  configured
+    failureMessage: Topology spread constraints should be configured
+    category: Reliability
+    target: Pod
+    schema:
+      '$schema': http://json-schema.org/draft-07/schema
+      type: object
+      required:
+      - topologySpreadConstraints
+      properties:
+        topologySpreadConstraints:
+          type: array
+          items:
+            type: object
+            required:
+            - topologyKey
+          allOf:
+          - contains:
+              properties:
+                topologyKey:
+                  const: "topology.kubernetes.io/zone"
+          - contains:
+              properties:
+                topologyKey:
+                  const: "topology.kubernetes.io/node"
 
 exemptions:
   - namespace: kube-system
