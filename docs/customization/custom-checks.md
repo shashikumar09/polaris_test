@@ -1,3 +1,8 @@
+---
+meta:
+  - name: description
+    content: "Fairwinds Polaris | Documentation: Create your own checks, you can use JSON Schema"
+---
 # Custom Checks
 
 If you'd like to create your own checks, you can use [JSON Schema](https://json-schema.org/).
@@ -91,6 +96,19 @@ customChecks:
                   type: string
                   resourceMinimum: 100m
                   resourceMaximum: "2"
+```
+
+## Resource Presence
+You can test for the presence of a resource in each Namespace. For example, to
+ensure an AlertmanagerConfig is in every Namespace:
+```yaml
+successMessage: Namespace has monitoring configuration
+failureMessage: Namespace should have monitoring configuration
+category: Security
+target: Namespace
+schema: {}
+additionalSchemas:
+  monitoring.coreos.com/AlertmanagerConfig: {}
 ```
 
 ## Templating
