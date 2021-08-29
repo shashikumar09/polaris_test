@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name:         polaris
-  namespace:    polaris
+  namespace:    dev
 
 data:
   config.yaml: |
@@ -18,9 +18,27 @@ data:
       memoryRequestsMissing: warning
       memoryLimitsMissing: warning
       #topologySpreadConstraints: warning
-      resourceLimits: warning
-
+      resourceLimits: ignore
+      multipleReplicasForDeployment: warning
+      HPALimits: ignore
+      multipleReplicasForDeployment: warning
+      wastageCost: warning
     customChecks:
+      wastageCost:
+        successMessage: No wastage.
+        failureMessage: Wastage cost is $130/m (memory/CPU requests - actual usage) ($260 - $130)
+        category: Resources
+        target: Container
+        schema:
+          '$schema': http://json-schema.org/draft-07/schema
+          type: object
+          required:
+          - resources
+          properties:
+            resources:
+              type: object
+              required:
+              - limits
       resourceLimits:
         containers:
           exclude:
@@ -48,13 +66,30 @@ data:
                   properties:
                     memory:
                       type: string
-                      resourceMinimum: 100M
-                      resourceMaximum: 6G
+                      resourceMinimum: 10M
+                      resourceMaximum: 9G
                     cpu:
                       type: string
                       resourceMinimum: 100m
                       resourceMaximum: "2"
-
+      HPALimits:
+        successMessage: Replica count limits are within the required range
+        failureMessage: Replica count limits should be within the required range
+        category: Resources
+        target: Controller
+        controllers:
+          include:
+          - Deployment
+        schema:
+          '$schema': http://json-schema.org/draft-07/schema
+          type: integer
+          required:
+          - replicas
+          properties:
+            replicas:
+              type: integer
+              minimum: 2
+              maximum: 4
     exemptions:
       - namespace: kube-system
         controllerNames:

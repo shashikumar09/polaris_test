@@ -1,16 +1,9 @@
----
-# Source: polaris/templates/0-namespace.yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: polaris
----
 # Source: polaris/templates/serviceaccount.yaml
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: polaris
-  namespace: polaris
+  namespace: dev
   labels:
     app: polaris
 ---
@@ -31,30 +24,6 @@ rules:
     verbs:
       - 'get'
       - 'list'
-  - apiGroups: 
-      - 'monitoring.coreos.com'
-    resources: 
-      - 'prometheuses'
-      - 'alertmanagers'
-    verbs: 
-      - 'get'
-      - 'list'
----
-# Source: polaris/templates/rbac.yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: polaris-view
-  labels:
-    app: polaris
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: view
-subjects:
-  - kind: ServiceAccount
-    name: polaris
-    namespace: polaris
 ---
 # Source: polaris/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -70,14 +39,14 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: polaris
-    namespace: polaris
+    namespace: dev
 ---
 # Source: polaris/templates/dashboard.service.yaml
 apiVersion: v1
 kind: Service
 metadata:
   name: polaris-dashboard
-  namespace: polaris
+  namespace: dev
   labels:
     app: polaris
   annotations:
@@ -97,7 +66,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: polaris-dashboard
-  namespace: polaris
+  namespace: dev
   labels:
     app: polaris
     component: dashboard
@@ -119,7 +88,9 @@ spec:
         - dashboard
         - --port
         - "8080"
-        image: 'quay.io/fairwinds/polaris:4.0'
+        - --config
+        - "/data/config/config.yaml"
+        image: shashikumar09/polaris:0.9.1
         imagePullPolicy: 'Always'
         name: dashboard
         ports:
@@ -138,7 +109,7 @@ spec:
           periodSeconds: 20
         resources:
           limits:
-            cpu: 150m
+            cpu: 130m
             memory: 512Mi
           requests:
             cpu: 100m
@@ -151,6 +122,20 @@ spec:
           capabilities:
             drop:
               - ALL
+        volumeMounts:
+          - name: polaris-config
+            mountPath: /data/config/
+      volumes:
+        - name: polaris-config
+          configMap:
+            name: polaris
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: uds
+        maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
       serviceAccountName: polaris
       nodeSelector:
       tolerations:
