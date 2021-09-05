@@ -10,7 +10,12 @@ import (
     datadog "github.com/DataDog/datadog-api-client-go/api/v1/datadog"
 )
 
-type queryResponse struct {
+var (
+    CPUCostPerCore float64 = 23
+    MemoryCostPerGB float64 = 6.5
+)
+
+type QueryResponse struct {
 	Status string  `json:"status"`
     Series  []struct {
         Metric string `json:"metric"`
@@ -20,23 +25,48 @@ type queryResponse struct {
 }
 
 
-type resourceLimits struct {
+type ResourceLimits struct {
     cpu float64
     memory float64
 }
 
-var HPALimitsQuery string = "sum:kubernetes_state.hpa.max_replicas{cluster_name:prod--us-east-1--uat}by{hpa,kube_namespace}";
+type ResourceRequests struct {
+    cpu float64
+    memory float64
+}
 
-var ResourcesLimitsQuery  string = "avg:kubernetes.cpu.limits{cluster_name:prod--us-east-1--uat}by{kube_deployment,kube_namespace},avg:kubernetes.memory.limits{cluster_name:prod--us-east-1--uat}by{kube_deployment,kube_namespace}";
-var ReplicasCountQuery string = "avg:kubernetes_state.deployment.replicas{cluster_name:prod--us-east-1--uat,kube_deployment:sshbg}by{kube_deployment,kube_namespace}";
+type ResourceCost struct {
+    cpu float64
+    memory float64
+}
 
+type ResourceUsage struct {
+    cpu float64
+    memory float64
+}
+var (
+    HPALimitsQuery string = "sum:kubernetes_state.hpa.max_replicas{cluster_name:prod--us-east-1--uat}by{hpa,kube_namespace}";
+    ResourcesLimitsQuery  string = "avg:kubernetes.cpu.limits{cluster_name:prod--us-east-1--uat}by{kube_deployment,kube_namespace},avg:kubernetes.memory.limits{cluster_name:prod--us-east-1--uat}by{kube_deployment,kube_namespace}";
+    ReplicasCountQuery string = "avg:kubernetes_state.deployment.replicas{cluster_name:prod--us-east-1--uat,kube_deployment:sshbg}by{kube_deployment,kube_namespace}";
+    ResourceRequestsQuery string = "avg:kubernetes.cpu.requests{cluster_name:prod--us-east-1--uat}by{kube_deployment,kube_namespace},avg:kubernetes.memory.requests{cluster_name:prod--us-east-1--uat}by{kube_deployment,kube_namespace}";
+    ResourceUsageQuery string = "avg:kubernetes.cpu.usage.total{cluster_name:prod--us-east-1--uat}by{kube_deployment,kube_namespace},avg:kubernetes.memory.usage{cluster_name:prod--us-east-1--uat}by{kube_deployment,kube_namespace}";
 
-var ResourceLimitsForDeployment queryResponse = queryTSMetricsFromDatadog(ResourcesLimitsQuery)
-var HPALimitsForDeployment queryResponse = queryTSMetricsFromDatadog(HPALimitsQuery)
-var ReplicasCountForDeployment queryResponse = queryTSMetricsFromDatadog(ReplicasCountQuery)
+    ResourceLimitsForDeployment QueryResponse;
+    HPALimitsForDeployment QueryResponse;
+    ReplicasCountForDeployment QueryResponse;
+    ResourceRequestsForDeployment QueryResponse;
+    ResourceUsageForDeployment QueryResponse;
+)
 
+func init() {
+    ResourceLimitsForDeployment = queryTSMetricsFromDatadog(ResourcesLimitsQuery)
+    HPALimitsForDeployment = queryTSMetricsFromDatadog(HPALimitsQuery)
+    ReplicasCountForDeployment = queryTSMetricsFromDatadog(ReplicasCountQuery)
+    ResourceRequestsForDeployment = queryTSMetricsFromDatadog(ResourceRequestsQuery)
+    ResourceUsageForDeployment = queryTSMetricsFromDatadog(ResourceUsageQuery)
+}
 
-func queryTSMetricsFromDatadog(query string) queryResponse {
+func queryTSMetricsFromDatadog(query string) QueryResponse {
     ctx := context.WithValue(
         context.Background(),
         datadog.ContextAPIKeys,
@@ -48,7 +78,8 @@ func queryTSMetricsFromDatadog(query string) queryResponse {
                 Key: os.Getenv("DD_CLIENT_APP_KEY"),
             },
         },
-    )	
+    )
+    fmt.Println(query)
     from := int64(1630483331) // int64 | Start of the queried time period, seconds since the Unix epoch.
     to := int64(1630483428)
     
@@ -60,10 +91,11 @@ func queryTSMetricsFromDatadog(query string) queryResponse {
         fmt.Fprintf(os.Stderr, "Error when calling `MetricsApi.ListTagsByMetricName`: %v\n", err)
         fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
     }
-        // response from `QueryMetrics`: 
-    responseContent, _ := json.MarshalIndent(resp, "", "  ")
-    fmt.Fprintf(os.Stdout, "Response from MetricsApi.ListTagsByMetricName:\n%s\n", responseContent)
-    var queryResponse1 queryResponse
+    // response from `QueryMetrics`: 
+    json.MarshalIndent(resp, "", "  ")
+    //responseContent, _ := json.MarshalIndent(resp, "", "  ")
+    //fmt.Fprintf(os.Stdout, "Response from MetricsApi.ListTagsByMetricName:\n%s\n", responseContent)
+    var queryResponse1 QueryResponse
     defer r.Body.Close()
     bodyBytes, err := ioutil.ReadAll(r.Body)
     if err != nil {
@@ -80,9 +112,9 @@ func queryTSMetricsFromDatadog(query string) queryResponse {
 }
 
 
-func getResourceLimitsForDeployment(deployment string, namespace string, cluster string) resourceLimits {
+func getResourceLimitsForDeployment(deployment string, namespace string, cluster string) ResourceLimits {
 
-    var resourceLimits resourceLimits;
+    var resourceLimits ResourceLimits;
     var CPUMetric string = "kubernetes.cpu.limits"
     var MemoryMetric string = "kubernetes.memory.limits"
     for _,i:= range ResourceLimitsForDeployment.Series {
@@ -153,7 +185,91 @@ func getHPALimitsForDeployment(deployment string, namespace string, cluster stri
         limit := FetchRepicasCountForDeployment(deployment, namespace, cluster)
 	return limit
     }
+
+}
+
+
+func getResourceRequestsForDeployment(deployment string, namespace string, cluster string) ResourceRequests {
+
+    var resourceRequests ResourceRequests;
+    var CPUMetric string = "kubernetes.cpu.requests"
+    var MemoryMetric string = "kubernetes.memory.requests"
+    for _,i:= range ResourceRequestsForDeployment.Series {
+	if i.TagSet[1] == "kube_namespace:" + namespace  && i.TagSet[0] == "kube_deployment:" + deployment {
+	    fmt.Println(i.Metric)
+            if i.Metric == CPUMetric {
+                resourceRequests.cpu = i.PointList[0][1]
+
+            }else if i.Metric == MemoryMetric {
+
+                resourceRequests.memory = i.PointList[0][1]
+
+           }
+        }
     }
+    return resourceRequests
+    
+} 
+
+func getResourceUsageForDeployment(deployment string, namespace string, cluster string) ResourceUsage{
+    var resourceUsage ResourceUsage;
+    var CPUMetric string = "kubernetes.cpu.usage.total"
+    var MemoryMetric string = "kubernetes.memory.usage"
+    for _,i:= range ResourceUsageForDeployment.Series {
+	if i.TagSet[1] == "kube_namespace:" + namespace  && i.TagSet[0] == "kube_deployment:" + deployment {
+	    fmt.Println(i.Metric)
+            if i.Metric == CPUMetric {
+                resourceUsage.cpu = i.PointList[0][1]
+
+            }else if i.Metric == MemoryMetric {
+
+                resourceUsage.memory = i.PointList[0][1]
+
+           }
+        }
+    }
+    return resourceUsage
+    
+} 
+    
+ func getGuranteedRequestsCost(deployment string, namespace string, cluster string) ResourceCost {
+    //returns the guranteed usage by multiplying the requests defined with the cost per unit
+    var GuaranteedRequestsCost ResourceCost;
+    var resourceRequests ResourceRequests = getResourceRequestsForDeployment(deployment, namespace, cluster)
+    GuaranteedRequestsCost.cpu = resourceRequests.cpu * CPUCostPerCore
+    GuaranteedRequestsCost.memory = (resourceRequests.memory / 1073741824) * MemoryCostPerGB
+
+    return GuaranteedRequestsCost
+        
+}
+
+    
+func getActualUsageCost(deployment string, namespace string, cluster string) ResourceCost {
+    
+    //returns the actual usage by multiplying actual usage with the cost per unit
+    var resourceUsage ResourceUsage = getResourceUsageForDeployment(deployment, namespace, cluster)
+    var ActualUsageCost ResourceCost;
+    ActualUsageCost.cpu = resourceUsage.cpu * CPUCostPerCore
+    ActualUsageCost.memory = (resourceUsage.memory / 1073741824) * MemoryCostPerGB
+
+    return ActualUsageCost
+
+}
+
+
+func getWastageCostForDeployment(deployment string, namespace string, cluster string) ResourceCost {
+    //returns wastage for deployment
+
+    var wastageCost ResourceCost;
+    var GuaranteedRequestsCost ResourceCost = getGuranteedRequestsCost(deployment, namespace, cluster)
+    var ActualUsageCost ResourceCost = getActualUsageCost(deployment, namespace, cluster)
+    
+    wastageCost.cpu = GuaranteedRequestsCost.cpu - ActualUsageCost.cpu
+    wastageCost.memory = GuaranteedRequestsCost.memory - ActualUsageCost.memory
+    return wastageCost
+
+}
+
 
 
 func main(){
@@ -162,5 +278,6 @@ func main(){
     fmt.Println(limit)
     p := getResourceLimitsForDeployment("sshbg", "shared-uat", "prod--us-east-1--uat")
     fmt.Println(p.cpu, p.memory)
-
+    q := getWastageCostForDeployment("sshbg", "shared-uat", "prod--us-east-1--uat")
+    fmt.Println(q.cpu, q.memory)
 }
