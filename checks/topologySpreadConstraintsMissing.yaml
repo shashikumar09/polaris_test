@@ -1,0 +1,21 @@
+successMessage: Topology spread constraints is configured
+failureMessage: Topology spread constraints should be configured
+category: Reliability
+controllers:
+  exclude:
+  - Job
+  - CronJob
+containers:
+  exclude:
+  - initContainer
+target: Container
+schema:
+  '$schema': http://json-schema.org/draft-07/schema
+  type: object
+  required:
+  - topologySpreadConstraints
+  properties:
+    topologySpreadConstraints:
+      type: object
+      not:
+        const: null

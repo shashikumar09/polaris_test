@@ -217,13 +217,12 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 	results := ResultSet{}
 	checkIDs := getSortedKeys(conf.Checks)
 	for _, checkID := range checkIDs {
-
 		if val, ok := conf.DynamicCustomChecks[checkID]; ok {
 			result, err = applyDynamicSchemaCheck(conf, checkID, test)
 			if err != nil {
 				return results, err
 			}
-		}
+		fmt.Println(checkID)
 		result, err := applySchemaCheck(conf, checkID, test)
 		if err != nil {
 			return results, err
@@ -235,6 +234,14 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 	return results, nil
 }
 
+
+func HandleWastageCostCheck(conf *config.Configuration, checkID string, test schemaTestCase) {
+	fmt.Println(checkID)
+	if test.Container != nil{
+		fmt.Println(test.Container.Name, test.Resource.ObjectMeta.GetNamespace())
+	}
+
+}
 func applySchemaCheck(conf *config.Configuration, checkID string, test schemaTestCase) (*ResultMessage, error) {
 	check, err := resolveCheck(conf, checkID, test)
 	if err != nil {

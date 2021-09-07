@@ -22,7 +22,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
-
+	"fmt"
 	"github.com/fairwindsops/polaris/pkg/config"
 	"github.com/fairwindsops/polaris/pkg/kube"
 	"github.com/fairwindsops/polaris/pkg/validator"
@@ -215,6 +215,7 @@ func GetRouter(c config.Configuration, auditPath string, port int, basePath stri
 
 			var auditData validator.AuditData
 			auditData, err = validator.RunAudit(adjustedConf, k)
+			fmt.Println(auditData)
 			if err != nil {
 				logrus.Errorf("Error getting audit data: %v", err)
 				http.Error(w, "Error running audit", 500)
@@ -232,7 +233,7 @@ func GetRouter(c config.Configuration, auditPath string, port int, basePath stri
 // MainHandler gets template data and renders the dashboard with it.
 func MainHandler(w http.ResponseWriter, r *http.Request, c config.Configuration, auditData validator.AuditData, basePath string) {
 	jsonData, err := json.Marshal(auditData.GetSummary())
-
+	fmt.Println(jsonData)
 	if err != nil {
 		http.Error(w, "Error serializing audit data", 500)
 		return
@@ -252,6 +253,7 @@ func MainHandler(w http.ResponseWriter, r *http.Request, c config.Configuration,
 		Config:            c,
 	}
 	tmpl, err := GetBaseTemplate("main")
+	fmt.Println(tmpl)
 	if err != nil {
 		logrus.Printf("Error getting template data %v", err)
 		http.Error(w, "Error getting template data", 500)
