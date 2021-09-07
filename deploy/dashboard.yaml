@@ -88,9 +88,7 @@ spec:
         - dashboard
         - --port
         - "8080"
-        - --config
-        - "/data/config/config.yaml"
-        image: shashikumar09/polaris:0.9.1
+        image: 'quay.io/fairwinds/polaris:4.1'
         imagePullPolicy: 'Always'
         name: dashboard
         ports:
