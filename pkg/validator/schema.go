@@ -218,14 +218,15 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 	checkIDs := getSortedKeys(conf.Checks)
 	for _, checkID := range checkIDs {
 		if val, ok := conf.DynamicCustomChecks[checkID]; ok {
-			result, err = applyDynamicSchemaCheck(conf, checkID, test)
+			result, err := applyDynamicSchemaCheck(conf, checkID, test)
 			if err != nil {
 				return results, err
 			}
-		fmt.Println(checkID)
-		result, err := applySchemaCheck(conf, checkID, test)
-		if err != nil {
-			return results, err
+		} else {
+			result, err := applySchemaCheck(conf, checkID, test);
+			if err != nil {
+				return results, err
+			}
 		}
 		if result != nil {
 			results[checkID] = *result
@@ -234,14 +235,21 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 	return results, nil
 }
 
+func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test schemaTestCase) (*ResultMessage, error) {
+	// Will perform DynamicSchemaChecks
 
-func HandleWastageCostCheck(conf *config.Configuration, checkID string, test schemaTestCase) {
-	fmt.Println(checkID)
-	if test.Container != nil{
-		fmt.Println(test.Container.Name, test.Resource.ObjectMeta.GetNamespace())
+
+	var passes bool
+	var issues []jsonschema.ValError
+	if checkID == "resourceLimits" {
+		check = conf.DynamicCustomChecks[checkID]
+		
+		
 	}
-
+	result := makeResult(conf, check, passes, issues)
+	return &result, nil		
 }
+
 func applySchemaCheck(conf *config.Configuration, checkID string, test schemaTestCase) (*ResultMessage, error) {
 	check, err := resolveCheck(conf, checkID, test)
 	if err != nil {
