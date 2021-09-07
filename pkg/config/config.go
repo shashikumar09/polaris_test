@@ -29,11 +29,12 @@ import (
 
 // Configuration contains all of the config for the validation checks.
 type Configuration struct {
-	DisplayName        string                 `json:"displayName"`
-	Checks             map[string]Severity    `json:"checks"`
-	CustomChecks       map[string]SchemaCheck `json:"customChecks"`
-	Exemptions         []Exemption            `json:"exemptions"`
-	DisallowExemptions bool                   `json:"disallowExemptions"`
+	DisplayName         string                 `json:"displayName"`
+	Checks              map[string]Severity    `json:"checks"`
+	CustomChecks        map[string]SchemaCheck `json:"customChecks"`
+	DynamicCustomChecks map[string]SchemaCheck `json:"dynamicCustomChecks"`
+	Exemptions          []Exemption            `json:"exemptions"`
+	DisallowExemptions  bool                   `json:"disallowExemptions"`
 }
 
 // Exemption represents an exemption to normal rules
@@ -95,6 +96,13 @@ func Parse(rawBytes []byte) (Configuration, error) {
 			return conf, err
 		}
 		conf.CustomChecks[key] = check
+		if _, ok := conf.Checks[key]; !ok {
+			return conf, fmt.Errorf("no severity specified for custom check %s. Please add the following to your configuration:\n\nchecks:\n  %s: warning # or danger/ignore\n\nto enable your check", key, key)
+		}
+	}
+
+	for key, check := range conf.DynamicCustomChecks {
+		conf.DynamicCustomChecks[key] = check
 		if _, ok := conf.Checks[key]; !ok {
 			return conf, fmt.Errorf("no severity specified for custom check %s. Please add the following to your configuration:\n\nchecks:\n  %s: warning # or danger/ignore\n\nto enable your check", key, key)
 		}

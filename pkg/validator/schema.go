@@ -217,6 +217,13 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 	results := ResultSet{}
 	checkIDs := getSortedKeys(conf.Checks)
 	for _, checkID := range checkIDs {
+
+		if val, ok := conf.DynamicCustomChecks[checkID]; ok {
+			result, err = applyDynamicSchemaCheck(conf, checkID, test)
+			if err != nil {
+				return results, err
+			}
+		}
 		result, err := applySchemaCheck(conf, checkID, test)
 		if err != nil {
 			return results, err
