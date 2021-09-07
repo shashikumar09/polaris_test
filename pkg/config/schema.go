@@ -133,6 +133,8 @@ func parseQuantity(i interface{}) (resource.Quantity, *[]jsonschema.ValError) {
 
 func validateRange(path string, limit interface{}, data interface{}, isMinimum bool) *[]jsonschema.ValError {
 	limitQuantity, err := parseQuantity(limit)
+	fmt.Println("ValidateRange")
+	fmt.Println(limitQuantity)
 	if err != nil {
 		return err
 	}
@@ -160,6 +162,8 @@ func validateRange(path string, limit interface{}, data interface{}, isMinimum b
 // Initialize sets up the schema
 func (check *SchemaCheck) Initialize(id string) error {
 	check.ID = id
+	fmt.Println("Hello Boss")
+	fmt.Println(check.ID)
 	if check.SchemaString == "" {
 		jsonBytes, err := json.Marshal(check.Schema)
 		if err != nil {
@@ -185,7 +189,7 @@ func (check *SchemaCheck) Initialize(id string) error {
 // TemplateForResource fills out a check's templated fields given a particular resource
 func (check SchemaCheck) TemplateForResource(res interface{}) (*SchemaCheck, error) {
 	newCheck := check // Make a copy of the check, since we're going to modify the schema
-
+	
 	templateStrings := map[string]string{
 		"": newCheck.SchemaString,
 	}
