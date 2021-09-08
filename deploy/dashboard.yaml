@@ -88,6 +88,8 @@ spec:
         - dashboard
         - --port
         - "8080"
+        - --config
+        - "/data/config/config.yaml"
         image: 'quay.io/fairwinds/polaris:4.1'
         imagePullPolicy: 'Always'
         name: dashboard
@@ -130,7 +132,7 @@ spec:
       topologySpreadConstraints:
       - labelSelector:
           matchLabels:
-            app.kubernetes.io/name: uds
+            app.kubernetes.io/name: polaris
         maxSkew: 1
         topologyKey: topology.kubernetes.io/zone
         whenUnsatisfiable: ScheduleAnyway
