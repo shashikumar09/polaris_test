@@ -31,11 +31,10 @@ func resolveCheck(conf *config.Configuration, checkID string, test schemaTestCas
 		check, ok = config.BuiltInChecks[checkID]
 	} else {
 		check, ok = conf.DynamicCustomChecks[checkID]
+		if !ok {
+			return nil, fmt.Errorf("Check %s not found", checkID)
+		}
 	}
-	if !ok {
-		return nil, fmt.Errorf("Check %s not found", checkID)
-	}
-
 	containerName := ""
 	if test.Container != nil {
 		containerName = test.Container.Name
@@ -242,6 +241,9 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 	return results, nil
 }
 
+
+
+
 func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test schemaTestCase) (*ResultMessage, error) {
 	// Will perform DynamicSchemaChecks
 
@@ -251,7 +253,7 @@ func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test sc
 		return nil, err
 	}
 	var issues []jsonschema.ValError
-	result := makeResult(conf, check, passes, issues)
+	result := makeDynamicResult(conf, check, passes, issues)
 	return &result, nil		
 }
 
