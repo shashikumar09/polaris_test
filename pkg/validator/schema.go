@@ -217,35 +217,38 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 	results := ResultSet{}
 	checkIDs := getSortedKeys(conf.Checks)
 	for _, checkID := range checkIDs {
-		if val, ok := conf.DynamicCustomChecks[checkID]; ok {
+		if _, ok := conf.DynamicCustomChecks[checkID]; ok {
 			result, err := applyDynamicSchemaCheck(conf, checkID, test)
 			if err != nil {
 				return results, err
+			}
+		
+			if result != nil {
+				results[checkID] = *result
 			}
 		} else {
 			result, err := applySchemaCheck(conf, checkID, test);
 			if err != nil {
 				return results, err
 			}
+
+			if result != nil {
+				results[checkID] = *result
+			}
 		}
-		if result != nil {
-			results[checkID] = *result
 		}
-	}
 	return results, nil
 }
 
 func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test schemaTestCase) (*ResultMessage, error) {
 	// Will perform DynamicSchemaChecks
 
-
+	check, err := resolveCheck(conf, checkID, test)
 	var passes bool
-	var issues []jsonschema.ValError
-	if checkID == "resourceLimits" {
-		check = conf.DynamicCustomChecks[checkID]
-		
-		
+	if err != nil {
+		return nil, err
 	}
+	var issues []jsonschema.ValError
 	result := makeResult(conf, check, passes, issues)
 	return &result, nil		
 }

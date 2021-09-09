@@ -8,16 +8,16 @@ data:
   config.yaml: |
     checks:
       # reliability
-      #readinessProbeMissing: warning
-      #livenessProbeMissing: warning
-      #pdbDisruptionsIsZero: warning
-      #missingPodDisruptionBudget: danger
+      readinessProbeMissing: warning
+      livenessProbeMissing: warning
+      pdbDisruptionsIsZero: warning
+      missingPodDisruptionBudget: danger
 
       cpuRequestsMissing: warning
       cpuLimitsMissing: warning
       memoryRequestsMissing: warning
       memoryLimitsMissing: warning
-      #topologySpreadConstraints: warning
+      topologySpreadConstraints: warning
       resourceLimits: ignore
       multipleReplicasForDeployment: warning
       HPALimits: ignore
