@@ -29,6 +29,8 @@ func resolveCheck(conf *config.Configuration, checkID string, test schemaTestCas
 	check, ok := conf.CustomChecks[checkID]
 	if !ok {
 		check, ok = config.BuiltInChecks[checkID]
+	} else {
+		check, ok = conf.DynamicCustomChecks[checkID]
 	}
 	if !ok {
 		return nil, fmt.Errorf("Check %s not found", checkID)
