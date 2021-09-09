@@ -249,11 +249,13 @@ func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test sc
 
 	check, err := resolveCheck(conf, checkID, test)
 	var passes bool
-	if err != nil {
+	if err != nil  {
 		return nil, err
+	} else if check == nil {
+		return nil, nil
 	}
 	var issues []jsonschema.ValError
-	result := makeDynamicResult(conf, check, passes, issues)
+	result := makeResult(conf, check, passes, issues)
 	return &result, nil		
 }
 
