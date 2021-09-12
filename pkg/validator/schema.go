@@ -2,6 +2,7 @@ package validator
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -12,6 +13,7 @@ import (
 
 	"github.com/fairwindsops/polaris/pkg/config"
 	"github.com/fairwindsops/polaris/pkg/kube"
+	"github.com/fairwindsops/polaris/pkg/datadog"
 )
 
 type schemaTestCase struct {
@@ -243,18 +245,65 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 
 
 
+func makeDynamicResult(conf *config.Configuration, check *config.SchemaCheck, passes bool, issues []jsonschema.ValError) ResultMessage {
+	details := []string{}
+	for _, issue := range issues {
+		details = append(details, issue.Message)
+	}
+	result := ResultMessage{
+		ID:       check.ID,
+		Severity: conf.Checks[check.ID],
+		Category: check.Category,
+		Success:  passes,
+		// FIXME: need to fix the tests before adding this back
+		//Details: details,
+	}
+	if passes {
+		result.Message = check.SuccessMessage
+	} else {
+		result.Message = check.FailureMessage
+	}
+	return result
+}
+
+
+func HandleHPALimitsCheck(conf *config.Configuration, checkID string, test schemaTestCase) {
+     
+	if os.Getenv("MACHINE_STABILITY") == "dev" || os.Getenv("MACHINE_STABILITY") == "qa" {
+		expectedLimits := datadog.getHPALimitsForDeqaDeployment(test.Resource.ObjectMeta.GetName(),test.Resource.ObjectMeta.GetNamespace(), os.Getenv("UPPER_CLUSTER"))
+	} else if os.Getenv("MACHINE_STABILITY") == "uat" {
+		expectedLimits := datadog.getHPALimitsForDeployment(test.Resource.ObjectMeta.GetName(), strings.ReplaceAll(test.Resource.ObjectMeta.GetNamespace(), "uat", ""), os.Getenv("UPPER_CLUSTER"))
+	} else {
+		expectedLimits := 2
+	}
+
+	actualLimits := 3
+	if actualLimits < expectedLimits {
+		return true, nil, nil
+	} else {
+		return false, nil, nil
+	}
+		
+}
 
 func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test schemaTestCase) (*ResultMessage, error) {
 	// Will perform DynamicSchemaChecks
 
-	check, err := resolveCheck(conf, checkID, test)
+	//check, err := resolveCheck(conf, checkID, test)
+	check, ok = conf.DynamicCustomChecks[checkID]
+	
 	var passes bool
 	if err != nil  {
 		return nil, err
-	} else if check == nil {
+	} else if !ok {
 		return nil, nil
 	}
 	var issues []jsonschema.ValError
+	if checkID == "HPALimits" {
+		if check.Target == conf.TargetController && test.Resource.Kind == "Deployment" {
+			passes, issue, err = HandleHPALimitsCheck(&check, checkID, test)
+		}
+	}
 	result := makeResult(conf, check, passes, issues)
 	return &result, nil		
 }
