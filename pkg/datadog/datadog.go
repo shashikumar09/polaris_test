@@ -7,7 +7,7 @@ import (
     "log"
     "io/ioutil"
     "encoding/json"
-    datadog "github.com/DataDog/datadog-api-client-go/api/v1/datadog"
+    datadogClient "github.com/DataDog/datadog-api-client-go/api/v1/datadog"
 )
 
 var (
@@ -69,8 +69,8 @@ func init() {
 func queryTSMetricsFromDatadog(query string) QueryResponse {
     ctx := context.WithValue(
         context.Background(),
-        datadog.ContextAPIKeys,
-        map[string]datadog.APIKey{
+        datadogClient.ContextAPIKeys,
+        map[string]datadogClient.APIKey{
             "apiKeyAuth": {
                 Key: os.Getenv("DD_CLIENT_API_KEY"),
             },
@@ -83,9 +83,9 @@ func queryTSMetricsFromDatadog(query string) QueryResponse {
     from := int64(1630483331) // int64 | Start of the queried time period, seconds since the Unix epoch.
     to := int64(1630483428)
     
-    configuration := datadog.NewConfiguration()
+    configuration := datadogClient.NewConfiguration()
     
-    apiClient := datadog.NewAPIClient(configuration)
+    apiClient := datadogClient.NewAPIClient(configuration)
     resp, r, err := apiClient.MetricsApi.QueryMetrics(ctx, from, to, query)
     if err != nil {
         fmt.Fprintf(os.Stderr, "Error when calling `MetricsApi.ListTagsByMetricName`: %v\n", err)
@@ -173,7 +173,7 @@ func FetchRepicasCountForDeployment(deployment string, namespace string, cluster
 
 }
 
-func getHPALimitsForDeployment(deployment string, namespace string, cluster string) float64{
+func GetHPALimitsForDeployment(deployment string, namespace string, cluster string) float64{
     //It will check whether HPA defined or not. If defined it will return min/max limits. else it will return min as 1 max as replicas configured for deplyoment
     
     if isDeploymentContainsHPA(deployment, namespace, cluster) {
@@ -271,13 +271,3 @@ func getWastageCostForDeployment(deployment string, namespace string, cluster st
 }
 
 
-
-func main(){
-
-    limit := getHPALimitsForDeployment("sshbg", "shared-uat", "prod--us-east-1--uat")
-    fmt.Println(limit)
-    p := getResourceLimitsForDeployment("sshbg", "shared-uat", "prod--us-east-1--uat")
-    fmt.Println(p.cpu, p.memory)
-    q := getWastageCostForDeployment("sshbg", "shared-uat", "prod--us-east-1--uat")
-    fmt.Println(q.cpu, q.memory)
-}
