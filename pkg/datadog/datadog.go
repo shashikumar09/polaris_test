@@ -181,8 +181,9 @@ func GetHPALimitsForDeployment(deployment string, namespace string, cluster stri
         return limit
 
      } else {
-
+	fmt.Println("came to else block", deployment, namespace)
         limit := FetchRepicasCountForDeployment(deployment, namespace, cluster)
+	fmt.Println(limit)
 	return limit
     }
 
@@ -257,7 +258,7 @@ func getActualUsageCost(deployment string, namespace string, cluster string) Res
 }
 
 
-func getWastageCostForDeployment(deployment string, namespace string, cluster string) ResourceCost {
+func GetWastageCostForDeployment(deployment string, namespace string, cluster string) (ResourceCost, ResourceCost, ResourceCost) {
     //returns wastage for deployment
 
     var wastageCost ResourceCost;
@@ -266,7 +267,7 @@ func getWastageCostForDeployment(deployment string, namespace string, cluster st
     
     wastageCost.cpu = GuaranteedRequestsCost.cpu - ActualUsageCost.cpu
     wastageCost.memory = GuaranteedRequestsCost.memory - ActualUsageCost.memory
-    return wastageCost
+    return wastageCost, GuaranteedRequestsCost, ActualUsageCost
 
 }
 
