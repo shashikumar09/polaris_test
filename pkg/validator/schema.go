@@ -32,27 +32,38 @@ func resolveCheck(conf *config.Configuration, checkID string, test schemaTestCas
 	check, ok := conf.CustomChecks[checkID]
 	if !ok {
 		check, ok = config.BuiltInChecks[checkID]
-	} else {
-		check, ok = conf.DynamicCustomChecks[checkID]
 		if !ok {
-			return nil, fmt.Errorf("Check %s not found", checkID)
+			check, ok = conf.DynamicCustomChecks[checkID]
+			fmt.Println("I'm dynamic check", checkID, check.Target)
+			if !ok {
+				return nil, fmt.Errorf("Check %s not found", checkID)
+			}
 		}
 	}
 	containerName := ""
 	if test.Container != nil {
 		containerName = test.Container.Name
 	}
-	if !conf.IsActionable(check.ID, test.Resource.ObjectMeta, containerName) {
+	fmt.Println(checkID, "initial tests passed")
+	if !conf.IsActionable(checkID, test.Resource.ObjectMeta, containerName) {
 		return nil, nil
 	}
+	fmt.Println(checkID, "1st Action test passed", test.Target, test.Resource.Kind)
 	if !check.IsActionable(test.Target, test.Resource.Kind, test.IsInitContianer) {
 		return nil, nil
 	}
-	checkPtr, err := check.TemplateForResource(test.Resource.Resource.Object)
-	if err != nil {
-		return nil, err
+	fmt.Println(checkID, "second action test passed")
+	if _, ok := conf.DynamicCustomChecks[checkID]; !ok {
+
+		checkPtr, err := check.TemplateForResource(test.Resource.Resource.Object)
+		if err != nil {
+			return nil, err
+		}
+		return checkPtr, nil
+	} else {
+		fmt.Println(checkID, "3rd test passed, returning pointer")
+		return  &check, nil
 	}
-	return checkPtr, nil
 }
 
 func makeResult(conf *config.Configuration, check *config.SchemaCheck, passes bool, issues []jsonschema.ValError) ResultMessage {
@@ -62,7 +73,7 @@ func makeResult(conf *config.Configuration, check *config.SchemaCheck, passes bo
 	}
 	result := ResultMessage{
 		ID:       check.ID,
-		Severity: conf.Checks[check.ID],
+		Severity: "warning",
 		Category: check.Category,
 		Success:  passes,
 		// FIXME: need to fix the tests before adding this back
@@ -73,6 +84,8 @@ func makeResult(conf *config.Configuration, check *config.SchemaCheck, passes bo
 	} else {
 		result.Message = check.FailureMessage
 	}
+	fmt.Println("make Result", result.Message, result.ID, result.Severity, result.Category)
+	fmt.Println(result)
 	return result
 }
 
@@ -103,6 +116,7 @@ func ApplyAllSchemaChecksToResourceProvider(conf *config.Configuration, resource
 		}
 		results = append(results, kindResults...)
 	}
+	fmt.Println("final results", results)
 	return results, nil
 }
 
@@ -228,6 +242,7 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 			}
 		
 			if result != nil {
+				fmt.Println("Success", checkID, result)
 				results[checkID] = *result
 			}
 		} else {
@@ -237,10 +252,12 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 			}
 
 			if result != nil {
+				fmt.Println("Apply schema check else block", result)
 				results[checkID] = *result
 			}
 		}
 		}
+	
 	return results, nil
 }
 
@@ -288,27 +305,50 @@ func HandleHPALimitsCheck(checkID string, test schemaTestCase) (bool, []jsonsche
 		
 }
 
+/*
+func HandleWastageCostCheck(check *config.SchemaCheck, checkID string, test schemaTestCase) (bool,   []jsonschema.ValError, error) {
+	var wastageCostLimit float64;
+	wastageCost, guaranteedUsageCost, actualUsageCost := datadog.GetWastageCostForDeployment(test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("UPPER_CLUSTER"))
+	wastageCostLimit = check.Schema["limit"]
+	totalGuranteedUsageCost := guaranteedUsageCost.memory + guaranteedUsageCost.cpu
+	totalWastageCost := wastageCost.cpu + wastageCost.memory
+	if totalWastageCost > wastageCostLimt {
+		message := "wastage cost is $" + string(wastageCost.cpu + wastageCost.memory) + "/m (Memory/CPU requests - Actual usage)($" + totalGuranteedUsageCost  + " -$" + totalWastageCost+ ")"
+		check.FailureMessage = message
+		return false,  nil, nil
+	} else {
+		message := "No wastage"
+		check.SuccessMessage = message
+		return true, nil, nil
+	}
+}
+*/
 func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test schemaTestCase) (*ResultMessage, error) {
 	// Will perform DynamicSchemaChecks
 
 	//check, err := resolveCheck(conf, checkID, test)
-	check, ok := conf.DynamicCustomChecks[checkID]
-	
-	var passes bool
-	if !ok {
+	check, err := resolveCheck(conf, checkID, test)
+	if err != nil {
+		return nil, err
+	} else if check == nil {
 		return nil, nil
 	}
-	var err error;
+	var passes bool
+	fmt.Println("I'm in dynamic check function", checkID)
 	var issues []jsonschema.ValError
 	if checkID == "HPALimits" {
-		if check.Target == config.TargetController && test.Resource.Kind == "Deployment" {
-			passes, issues, err = HandleHPALimitsCheck(checkID, test)
-		}
+		passes, issues, err = HandleHPALimitsCheck(checkID, test)
 		if err != nil {
 			return nil, err
 		}
-	}
-	result := makeResult(conf, &check, passes, issues)
+	} 
+	/*else if checkID == "WastageCost" {
+		passes, issues, err = HandleWastageCostCheck(check, checkID, test)
+		if err != nil {
+			return nil, err
+		}
+	}*/
+	result := makeResult(conf, check, passes, issues)
 	return &result, nil		
 }
 
