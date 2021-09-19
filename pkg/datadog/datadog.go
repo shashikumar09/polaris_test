@@ -45,11 +45,11 @@ type ResourceUsage struct {
     memory float64
 }
 var (
-    HPALimitsQuery string = "sum:kubernetes_state.hpa.max_replicas{cluster_name:prod--us-east-1--uat}by{hpa,kube_namespace}";
-    ResourcesLimitsQuery  string = "avg:kubernetes.cpu.limits{cluster_name:prod--us-east-1--uat}by{kube_deployment,kube_namespace},avg:kubernetes.memory.limits{cluster_name:prod--us-east-1--uat}by{kube_deployment,kube_namespace}";
-    ReplicasCountQuery string = "avg:kubernetes_state.deployment.replicas{cluster_name:prod--us-east-1--uat,kube_deployment:sshbg}by{kube_deployment,kube_namespace}";
-    ResourceRequestsQuery string = "avg:kubernetes.cpu.requests{cluster_name:prod--us-east-1--uat}by{kube_deployment,kube_namespace},avg:kubernetes.memory.requests{cluster_name:prod--us-east-1--uat}by{kube_deployment,kube_namespace}";
-    ResourceUsageQuery string = "avg:kubernetes.cpu.usage.total{cluster_name:prod--us-east-1--uat}by{kube_deployment,kube_namespace},avg:kubernetes.memory.usage{cluster_name:prod--us-east-1--uat}by{kube_deployment,kube_namespace}";
+    HPALimitsQuery string = "sum:kubernetes_state.hpa.max_replicas{*}by{hpa,kube_namespace,cluster_name}";
+    ResourcesLimitsQuery  string = "avg:kubernetes.cpu.limits{*}by{kube_deployment,kube_namespace,cluster_name},avg:kubernetes.memory.limits{*}by{kube_deployment,kube_namespace,cluster_name}";
+    ReplicasCountQuery string = "avg:kubernetes_state.deployment.replicas{*}by{kube_deployment,kube_namespace,cluster_name}";
+    ResourceRequestsQuery string = "avg:kubernetes.cpu.requests{*}by{kube_deployment,kube_namespace,cluster_name},avg:kubernetes.memory.requests{*}by{kube_deployment,kube_namespace,cluster_name}";
+    ResourceUsageQuery string = "avg:kubernetes.cpu.usage.total{*}by{kube_deployment,kube_namespace,cluster_name},avg:kubernetes.memory.usage{*}by{kube_deployment,kube_namespace,cluster_name}";
 
     ResourceLimitsForDeployment QueryResponse;
     HPALimitsForDeployment QueryResponse;
@@ -118,7 +118,7 @@ func getResourceLimitsForDeployment(deployment string, namespace string, cluster
     var CPUMetric string = "kubernetes.cpu.limits"
     var MemoryMetric string = "kubernetes.memory.limits"
     for _,i:= range ResourceLimitsForDeployment.Series {
-	if i.TagSet[1] == "kube_namespace:" + namespace  && i.TagSet[0] == "kube_deployment:" + deployment {
+	if i.TagSet[1] == "kube_namespace:" + namespace  && i.TagSet[0] == "kube_deployment:" + deployment && i.TagSet[2] == "cluster_name:" + cluster {
 	    fmt.Println(i.Metric)
             if i.Metric == CPUMetric {
                 resourceLimits.cpu = i.PointList[0][1]
@@ -138,7 +138,7 @@ func getResourceLimitsForDeployment(deployment string, namespace string, cluster
 func isDeploymentContainsHPA(deployment string, namespace string, cluster string) bool{
 
     for _, i:= range HPALimitsForDeployment.Series {
-        if i.TagSet[1] == "kube_namespace:" + namespace && i.TagSet[0] == "hpa:hpa-" + deployment {
+	    if i.TagSet[1] == "kube_namespace:" + namespace && i.TagSet[0] == "hpa:hpa-" + deployment && i.TagSet[2] == "cluster_name:" + cluster {
             return true
         }
         
@@ -151,7 +151,7 @@ func FetchHPALimitForDeployment(deployment string, namespace string, cluster str
    
     var limit float64;
     for _, i:= range HPALimitsForDeployment.Series {
-        if i.TagSet[1] == "kube_namespace:" + namespace && i.TagSet[0] == "hpa:hpa-" + deployment {
+	    if i.TagSet[1] == "kube_namespace:" + namespace && i.TagSet[0] == "hpa:hpa-" + deployment && i.TagSet[2] == "cluster_name:" + cluster {
             limit = i.PointList[0][1]
 
 	}
@@ -163,7 +163,7 @@ func FetchRepicasCountForDeployment(deployment string, namespace string, cluster
     
     var replicaCount float64;
     for _, i:= range ReplicasCountForDeployment.Series {
-	if i.TagSet[1] == "kube_namespace:" + namespace  && i.TagSet[0] == "kube_deployment:" + deployment {
+	    if i.TagSet[1] == "kube_namespace:" + namespace  && i.TagSet[0] == "kube_deployment:" + deployment && i.TagSet[2] == "cluster_name:" + cluster{
 	    replicaCount =  i.PointList[0][1]
 	    break;
         }
@@ -196,7 +196,7 @@ func getResourceRequestsForDeployment(deployment string, namespace string, clust
     var CPUMetric string = "kubernetes.cpu.requests"
     var MemoryMetric string = "kubernetes.memory.requests"
     for _,i:= range ResourceRequestsForDeployment.Series {
-	if i.TagSet[1] == "kube_namespace:" + namespace  && i.TagSet[0] == "kube_deployment:" + deployment {
+	    if i.TagSet[1] == "kube_namespace:" + namespace  && i.TagSet[0] == "kube_deployment:" + deployment && i.TagSet[2] == "cluster_name:"+ cluster {
 	    fmt.Println(i.Metric)
             if i.Metric == CPUMetric {
                 resourceRequests.cpu = i.PointList[0][1]
@@ -217,7 +217,7 @@ func getResourceUsageForDeployment(deployment string, namespace string, cluster 
     var CPUMetric string = "kubernetes.cpu.usage.total"
     var MemoryMetric string = "kubernetes.memory.usage"
     for _,i:= range ResourceUsageForDeployment.Series {
-	if i.TagSet[1] == "kube_namespace:" + namespace  && i.TagSet[0] == "kube_deployment:" + deployment {
+	    if i.TagSet[1] == "kube_namespace:" + namespace  && i.TagSet[0] == "kube_deployment:" + deployment && i.TagSet[2] == "cluster_name:" + cluster {
 	    fmt.Println(i.Metric)
             if i.Metric == CPUMetric {
                 resourceUsage.cpu = i.PointList[0][1]
