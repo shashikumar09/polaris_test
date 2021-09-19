@@ -5,12 +5,10 @@ import (
 	"os"
 	"sort"
 	"strings"
-
 	"github.com/qri-io/jsonschema"
 	"github.com/thoas/go-funk"
 	corev1 "k8s.io/api/core/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/fairwindsops/polaris/pkg/config"
 	"github.com/fairwindsops/polaris/pkg/kube"
 	"github.com/fairwindsops/polaris/pkg/datadog"
@@ -287,17 +285,16 @@ func makeDynamicResult(conf *config.Configuration, check *config.SchemaCheck, pa
 
 func HandleHPALimitsCheck(checkID string, test schemaTestCase) (bool, []jsonschema.ValError, error){
 	var expectedLimits  float64;     
-	var actualLimits float64;
+	//var actualLimits float64;
 	if os.Getenv("MACHINE_STABILITY") == "dev" || os.Getenv("MACHINE_STABILITY") == "qa" {
 		expectedLimits = 3 // datadog.getHPALimitsForDeqaDeployment(test.Resource.ObjectMeta.GetName(),test.Resource.ObjectMeta.GetNamespace(), os.Getenv("UPPER_CLUSTER"))
 	} else if os.Getenv("MACHINE_STABILITY") == "uat" {
-		expectedLimits = datadog.GetHPALimitsForDeployment(test.Resource.ObjectMeta.GetName(), strings.ReplaceAll(test.Resource.ObjectMeta.GetNamespace(), "uat", ""), os.Getenv("UPPER_CLUSTER"))
+		expectedLimits = datadog.GetHPALimitsForDeployment(test.Resource.ObjectMeta.GetName(), strings.ReplaceAll(test.Resource.ObjectMeta.GetNamespace(), "uat", ""), os.Getenv("CLUSTER"))
 	} else {
 		expectedLimits = 2
 	}
-
-	actualLimits = 3
-	if actualLimits < expectedLimits {
+	actualLimits  := datadog.GetHPALimitsForDeployment(test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("MACHINE_STABILITY"))
+	if int(actualLimits) < int(expectedLimits) {
 		return true, nil, nil
 	} else {
 		return false, nil, nil
@@ -305,15 +302,14 @@ func HandleHPALimitsCheck(checkID string, test schemaTestCase) (bool, []jsonsche
 		
 }
 
-/*
+
 func HandleWastageCostCheck(check *config.SchemaCheck, checkID string, test schemaTestCase) (bool,   []jsonschema.ValError, error) {
-	var wastageCostLimit float64;
 	wastageCost, guaranteedUsageCost, actualUsageCost := datadog.GetWastageCostForDeployment(test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("UPPER_CLUSTER"))
-	wastageCostLimit = check.Schema["limit"]
-	totalGuranteedUsageCost := guaranteedUsageCost.memory + guaranteedUsageCost.cpu
-	totalWastageCost := wastageCost.cpu + wastageCost.memory
-	if totalWastageCost > wastageCostLimt {
-		message := "wastage cost is $" + string(wastageCost.cpu + wastageCost.memory) + "/m (Memory/CPU requests - Actual usage)($" + totalGuranteedUsageCost  + " -$" + totalWastageCost+ ")"
+	wastageCostLimit := check.Schema["limit"].(int)
+	totalGuranteedUsageCost := guaranteedUsageCost.Memory + guaranteedUsageCost.CPU
+	totalWastageCost := wastageCost.CPU + wastageCost.Memory
+	if int(totalWastageCost) > int(wastageCostLimit) {
+		message := "wastage cost is $" + fmt.Sprintf("%f", totalWastageCost) + "/m (Memory/CPU requests - Actual usage)($" + fmt.Sprintf("%f" , totalGuranteedUsageCost) + " -$" + fmt.Sprintf("%f", actualUsageCost)+ ")"
 		check.FailureMessage = message
 		return false,  nil, nil
 	} else {
@@ -322,7 +318,25 @@ func HandleWastageCostCheck(check *config.SchemaCheck, checkID string, test sche
 		return true, nil, nil
 	}
 }
-*/
+
+func HandleResourceLimitsCheck(conf *config.Configuration, checkID string, test schemaTestCase) (bool, []jsonschema.ValError, error) {
+	var expectedResourceLimits  float64;     
+	//var actualLimits float64;
+	if os.Getenv("MACHINE_STABILITY") == "dev" || os.Getenv("MACHINE_STABILITY") == "qa" {
+		expectedResourceLimits = datadog.GetResourceLimitsForDeployment(test.Resource.ObjectMeta.GetName(),test.Resource.ObjectMeta.GetNamespace(), os.Getenv("UPPER_CLUSTER"))
+	} else if os.Getenv("MACHINE_STABILITY") == "uat" {
+		expectedResourceLimits = datadog.GetResourceLimitsForDeployment(test.Resource.ObjectMeta.GetName(), strings.ReplaceAll(test.Resource.ObjectMeta.GetNamespace(), "uat", ""), os.Getenv("CLUSTER"))
+	} else {
+		return nil, nil, nil
+	}
+	actualResourceLimits  := datadog.GetResourceLimitsForDeployment(test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("CLUSTER"))
+	if int(actualResourceLimits) < int(expectedResourceLimits) {
+		return true, nil, nil
+	} else {
+		return false, nil, nil
+	}
+}
+
 func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test schemaTestCase) (*ResultMessage, error) {
 	// Will perform DynamicSchemaChecks
 
@@ -341,13 +355,22 @@ func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test sc
 		if err != nil {
 			return nil, err
 		}
-	} 
-	/*else if checkID == "WastageCost" {
+	} else if checkID == "WastageCost" {
 		passes, issues, err = HandleWastageCostCheck(check, checkID, test)
 		if err != nil {
 			return nil, err
 		}
-	}*/
+	} else if checkID == "ResourceLimits" {
+		passes, issues, err = HandleResourceLimitsCheck(check, checkID, test)
+		if passes == nil{
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		return nil, nil
+	}
 	result := makeResult(conf, check, passes, issues)
 	return &result, nil		
 }

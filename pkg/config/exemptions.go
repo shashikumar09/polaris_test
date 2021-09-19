@@ -2,18 +2,20 @@ package config
 
 import (
 	"strings"
-
+	"fmt"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // IsActionable determines whether a check is actionable given the current configuration
 func (conf Configuration) IsActionable(ruleID string, objMeta metav1.Object, containerName string) bool {
 	if severity, ok := conf.Checks[ruleID]; !ok || !severity.IsActionable() {
+		fmt.Println(ruleID, "Failed at first place")
 		return false
 	}
 	if conf.DisallowExemptions {
 		return true
 	}
+
 	for _, exemption := range conf.Exemptions {
 		if exemption.Namespace != "" && exemption.Namespace != objMeta.GetNamespace() {
 			continue
