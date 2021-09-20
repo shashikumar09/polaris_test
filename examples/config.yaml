@@ -1,46 +1,62 @@
 checks:
   # reliability
-  readinessProbeMissing: warning
-  livenessProbeMissing: warning
-  pdbDisruptionsIsZero: warning
-  missingPodDisruptionBudget: danger
-
+  multipleReplicasForDeployment: warning
+  #priorityClassNotSet: warning
+  #tagNotSpecified: danger
+  #pullPolicyNotAlways: warning
+  #readinessProbeMissing: warning
+  #livenessProbeMissing: warning
+  # efficiency
   cpuRequestsMissing: warning
-  cpuLimitsMissing: warning
+  #cpuLimitsMissing: warning
   memoryRequestsMissing: warning
-  memoryLimitsMissing: warning
-  topologySpreadConstraints: warning
+  #memoryLimitsMissing: warning
+  # security
+  #hostIPCSet: danger
+  #hostPIDSet: danger
+  #notReadOnlyRootFilesystem: warning
+  #privilegeEscalationAllowed: danger
+  #runAsRootAllowed: warning
+  #runAsPrivileged: danger
+  #dangerousCapabilities: danger
+  #insecureCapabilities: warning
+  #hostNetworkSet: warning
+  #hostPortSet: warning
+  # custom
+  #resourceLimits: ignore
+  ##imageRegistry: danger
+  HPALimits: warning
+  WastageCost: warning
+  ResourceLimits: warning
 
-
-
-customChecks:
-  topologySpreadConstraints:
-    successMessage: Topology spread constraints is  configured
-    failureMessage: Topology spread constraints should be configured
+dynamicCustomChecks:
+  ResourceLimits:
+    include:
+    - Deployment
+    successMessage: Resource limits are within the required range
+    failureMessage: Resource limits should be within the required range
     category: Reliability
-    target: Pod
+    target: Controller
+  HPALimits:
+    include:
+    - Deployment
+    successMessage: HPA/Repica limits are within the required range
+    failureMessage: HPA/Repica limits should be within the required range
+    category: Reliability
+    target: Controller
     schema:
       '$schema': http://json-schema.org/draft-07/schema
-      type: object
-      required:
-      - topologySpreadConstraints
-      properties:
-        topologySpreadConstraints:
-          type: array
-          items:
-            type: object
-            required:
-            - topologyKey
-          allOf:
-          - contains:
-              properties:
-                topologyKey:
-                  const: "topology.kubernetes.io/zone"
-          - contains:
-              properties:
-                topologyKey:
-                  const: "topology.kubernetes.io/node"
-
+    
+  WastageCost:
+    include:
+    - Deployment
+    successMessage: Wastege cost within the required range
+    failureMessage: Wastage cost should be within the required range
+    category: Reliability
+    target: Controller
+    schema:
+      '$schema': http://json-schema.org/draft-07/schema
+      limit: 30
 exemptions:
   - namespace: kube-system
     controllerNames:

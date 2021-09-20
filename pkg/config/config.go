@@ -102,11 +102,11 @@ func Parse(rawBytes []byte) (Configuration, error) {
 	}
 
 	for key, check := range conf.DynamicCustomChecks {
-		err := check.Initialize(key)
+		/*err := check.Initialize(key)
 		if err != nil {
 			return conf, err
-		}
-		fmt.Println("Dynamic check", key, check)
+		}*/
+		check.ID = key
 		conf.DynamicCustomChecks[key] = check
 		if _, ok := conf.Checks[key]; !ok {
 			return conf, fmt.Errorf("no severity specified for dynamic custom check %s. Please add the following to your configuration:\n\nchecks:\n  %s: warning # or danger/ignore\n\nto enable your check", key, key)

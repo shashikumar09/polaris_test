@@ -32,7 +32,6 @@ func resolveCheck(conf *config.Configuration, checkID string, test schemaTestCas
 		check, ok = config.BuiltInChecks[checkID]
 		if !ok {
 			check, ok = conf.DynamicCustomChecks[checkID]
-			fmt.Println("I'm dynamic check", checkID, check.Target)
 			if !ok {
 				return nil, fmt.Errorf("Check %s not found", checkID)
 			}
@@ -42,15 +41,12 @@ func resolveCheck(conf *config.Configuration, checkID string, test schemaTestCas
 	if test.Container != nil {
 		containerName = test.Container.Name
 	}
-	fmt.Println(checkID, "initial tests passed")
 	if !conf.IsActionable(checkID, test.Resource.ObjectMeta, containerName) {
 		return nil, nil
 	}
-	fmt.Println(checkID, "1st Action test passed", test.Target, test.Resource.Kind)
 	if !check.IsActionable(test.Target, test.Resource.Kind, test.IsInitContianer) {
 		return nil, nil
 	}
-	fmt.Println(checkID, "second action test passed")
 	if _, ok := conf.DynamicCustomChecks[checkID]; !ok {
 
 		checkPtr, err := check.TemplateForResource(test.Resource.Resource.Object)
@@ -59,7 +55,6 @@ func resolveCheck(conf *config.Configuration, checkID string, test schemaTestCas
 		}
 		return checkPtr, nil
 	} else {
-		fmt.Println(checkID, "3rd test passed, returning pointer")
 		return  &check, nil
 	}
 }
@@ -114,7 +109,6 @@ func ApplyAllSchemaChecksToResourceProvider(conf *config.Configuration, resource
 		}
 		results = append(results, kindResults...)
 	}
-	fmt.Println("final results", results)
 	return results, nil
 }
 
@@ -240,7 +234,6 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 			}
 		
 			if result != nil {
-				fmt.Println("Success", checkID, result)
 				results[checkID] = *result
 			}
 		} else {
@@ -250,7 +243,6 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 			}
 
 			if result != nil {
-				fmt.Println("Apply schema check else block", result)
 				results[checkID] = *result
 			}
 		}
@@ -305,7 +297,10 @@ func HandleHPALimitsCheck(checkID string, test schemaTestCase) (bool, []jsonsche
 
 func HandleWastageCostCheck(check *config.SchemaCheck, checkID string, test schemaTestCase) (bool,   []jsonschema.ValError, error) {
 	wastageCost, guaranteedUsageCost, actualUsageCost := datadog.GetWastageCostForDeployment(test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("UPPER_CLUSTER"))
-	wastageCostLimit := check.Schema["limit"].(int)
+	wastageCostLimit, ok := check.Schema["limit"].(float64); 
+	if !ok {
+ 	   return false, nil,fmt.Errorf("Limits not found for schema", wastageCostLimit) 
+	}
 	totalGuranteedUsageCost := guaranteedUsageCost.Memory + guaranteedUsageCost.CPU
 	totalWastageCost := wastageCost.CPU + wastageCost.Memory
 	if int(totalWastageCost) > int(wastageCostLimit) {
@@ -319,22 +314,44 @@ func HandleWastageCostCheck(check *config.SchemaCheck, checkID string, test sche
 	}
 }
 
-func HandleResourceLimitsCheck(conf *config.Configuration, checkID string, test schemaTestCase) (bool, []jsonschema.ValError, error) {
-	var expectedResourceLimits  float64;     
+func HandleResourceLimitsCheck(check *config.SchemaCheck, checkID string, test schemaTestCase) (bool, []jsonschema.ValError, error) {
 	//var actualLimits float64;
+	var expectedResourceLimits datadog.ResourceLimits
 	if os.Getenv("MACHINE_STABILITY") == "dev" || os.Getenv("MACHINE_STABILITY") == "qa" {
 		expectedResourceLimits = datadog.GetResourceLimitsForDeployment(test.Resource.ObjectMeta.GetName(),test.Resource.ObjectMeta.GetNamespace(), os.Getenv("UPPER_CLUSTER"))
-	} else if os.Getenv("MACHINE_STABILITY") == "uat" {
+	} else  {
 		expectedResourceLimits = datadog.GetResourceLimitsForDeployment(test.Resource.ObjectMeta.GetName(), strings.ReplaceAll(test.Resource.ObjectMeta.GetNamespace(), "uat", ""), os.Getenv("CLUSTER"))
-	} else {
-		return nil, nil, nil
-	}
+	} 
+	fmt.Println(expectedResourceLimits)
 	actualResourceLimits  := datadog.GetResourceLimitsForDeployment(test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("CLUSTER"))
-	if int(actualResourceLimits) < int(expectedResourceLimits) {
+	if int(actualResourceLimits.CPU) > int(expectedResourceLimits.CPU) && int(actualResourceLimits.Memory) > int(expectedResourceLimits.Memory) {
+		message := "CPU/Memory Limits are not within range"
+		check.FailureMessage = message
+		return false, nil, nil
+	} else if int(actualResourceLimits.CPU) > int(expectedResourceLimits.CPU) {
+		message := "CPU Limits are not within range"
+		check.FailureMessage = message
+		return false, nil, nil
+	} else if int(actualResourceLimits.Memory) > int(expectedResourceLimits.Memory) {
+		message := "Memory Limits are not within range"
+		check.FailureMessage = message
+		return false, nil, nil
+	} else if int(actualResourceLimits.CPU) <= int(expectedResourceLimits.CPU) || int(actualResourceLimits.Memory) <= int(expectedResourceLimits.Memory) {
+		message := "CPU/Memory Limits are within range"
+		check.FailureMessage = message
+		return true, nil, nil
+	} else if int(actualResourceLimits.CPU) <= int(expectedResourceLimits.CPU) {
+		message := "CPU Limits within range"
+		check.FailureMessage = message
 		return true, nil, nil
 	} else {
-		return false, nil, nil
+
+		message := "Memory Limits within range"
+		check.FailureMessage = message
+		return true, nil, nil
 	}
+
+
 }
 
 func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test schemaTestCase) (*ResultMessage, error) {
@@ -362,9 +379,6 @@ func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test sc
 		}
 	} else if checkID == "ResourceLimits" {
 		passes, issues, err = HandleResourceLimitsCheck(check, checkID, test)
-		if passes == nil{
-			return nil, nil
-		}
 		if err != nil {
 			return nil, err
 		}

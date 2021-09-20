@@ -88,7 +88,7 @@ spec:
         - dashboard
         - --port
         - "8080"
-        image: 'quay.io/fairwinds/polaris:4.1'
+        image: 'shashikumar09/polaris:92012'
         imagePullPolicy: 'Always'
         name: dashboard
         ports:
@@ -105,9 +105,17 @@ spec:
             port: 8080
           initialDelaySeconds: 5
           periodSeconds: 20
+        
+        env:
+          - name: DD_CLIENT_API_KEY
+            value: a4748ca0ec3a1f251d9df8b9a749291a
+          - name: DD_CLIENT_APP_KEY
+            value: c2543df1c10112e56b1403f35bdf9b2618156b24
+          - name: MACHINE_STABILITY
+            value: uat
         resources:
           limits:
-            cpu: 130m
+            cpu: 140m
             memory: 512Mi
           requests:
             cpu: 100m
