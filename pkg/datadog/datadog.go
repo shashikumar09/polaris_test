@@ -4,6 +4,7 @@ import (
     "context"
     "fmt"
     "os"
+    "time"
     "log"
     "io/ioutil"
     "encoding/json"
@@ -89,9 +90,10 @@ func queryTSMetricsFromDatadog(query string) QueryResponse {
         },
     )
     fmt.Println(query)
-    from := int64(1630483331) // int64 | Start of the queried time period, seconds since the Unix epoch.
-    to := int64(1630483428)
-    
+    now := time.Now()
+    from := now.AddDate(0, -1, 0).Unix()
+    to := now.Unix()
+
     configuration := datadogClient.NewConfiguration()
     
     apiClient := datadogClient.NewAPIClient(configuration)
@@ -311,6 +313,7 @@ func GetWastageCostForDeployment(deployment string, namespace string, cluster st
     
     wastageCost.CPU = GuaranteedRequestsCost.CPU - ActualUsageCost.CPU
     wastageCost.Memory = GuaranteedRequestsCost.Memory - ActualUsageCost.Memory
+    fmt.Println(wastageCost, GuaranteedRequestsCost,ActualUsageCost)
     return wastageCost, GuaranteedRequestsCost, ActualUsageCost
 
 }
