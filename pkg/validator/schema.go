@@ -77,8 +77,6 @@ func makeResult(conf *config.Configuration, check *config.SchemaCheck, passes bo
 	} else {
 		result.Message = check.FailureMessage
 	}
-	fmt.Println("make Result", result.Message, result.ID, result.Severity, result.Category)
-	fmt.Println(result)
 	return result
 }
 
@@ -253,54 +251,48 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 
 
 
-func makeDynamicResult(conf *config.Configuration, check *config.SchemaCheck, passes bool, issues []jsonschema.ValError) ResultMessage {
-	details := []string{}
-	for _, issue := range issues {
-		details = append(details, issue.Message)
-	}
-	result := ResultMessage{
-		ID:       check.ID,
-		Severity: conf.Checks[check.ID],
-		Category: check.Category,
-		Success:  passes,
-		// FIXME: need to fix the tests before adding this back
-		//Details: details,
-	}
-	if passes {
-		result.Message = check.SuccessMessage
-	} else {
-		result.Message = check.FailureMessage
-	}
-	return result
-}
+
 
 
 func HandleHPALimitsCheck(checkID string, test schemaTestCase) (bool, []jsonschema.ValError, error){
-	var expectedLimits  float64;     
+	var upperClusterLimits  datadog.ResourceLimits;     
 	//var actualLimits float64;
 	if os.Getenv("MACHINE_STABILITY") == "dev" || os.Getenv("MACHINE_STABILITY") == "qa" {
-		expectedLimits = 3 // datadog.getHPALimitsForDeqaDeployment(test.Resource.ObjectMeta.GetName(),test.Resource.ObjectMeta.GetNamespace(), os.Getenv("UPPER_CLUSTER"))
+		upperClusterLimits = datadog.GetHPALimits(test.Resource.ObjectMeta.GetName(), os.Getenv("UPPER_CLUSTER"))
 	} else if os.Getenv("MACHINE_STABILITY") == "uat" {
-		expectedLimits = datadog.GetHPALimitsForDeployment(test.Resource.ObjectMeta.GetName(), strings.ReplaceAll(test.Resource.ObjectMeta.GetNamespace(), "uat", ""), os.Getenv("CLUSTER"))
-	} else {
-		expectedLimits = 2
+		upperClusterLimits = datadog.GetHPALimitsForDeployment(test.Resource.ObjectMeta.GetName(), strings.ReplaceAll(test.Resource.ObjectMeta.GetNamespace(), "uat", ""), os.Getenv("UPPER_CLUSTER"))	} else {
+		
 	}
-	actualLimits  := datadog.GetHPALimitsForDeployment(test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("MACHINE_STABILITY"))
-	if int(actualLimits) < int(expectedLimits) {
+	actualLimits  := datadog.GetHPALimitsForDeployment(test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("CLUSTER"))
+	if  int(actualLimits.Max) < int(upperClusterLimits.Max){
 		return true, nil, nil
 	} else {
 		return false, nil, nil
-	}
+	}xx
 		
 }
 
 
 func HandleWastageCostCheck(check *config.SchemaCheck, checkID string, test schemaTestCase) (bool,   []jsonschema.ValError, error) {
-	wastageCost, guaranteedUsageCost, actualUsageCost := datadog.GetWastageCostForDeployment(test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("UPPER_CLUSTER"))
+	
+	var ResourceCostPerUnit datadog.ResourceCost
+	ResourceCostPerUnit.CPU, ok = check.Schema["memory"].(float64); 
+	if !ok {
+ 	   return false, nil,fmt.Errorf("CPU cost pet unig not found for schema", wastageCostLimit) 
+	}
+	ResourceCostPerUnit.Memory, ok = check.Schema["cpu"].(float64);
+	if !ok {
+ 	   return false, nil,fmt.Errorf("Memory cost pet unig not found for schema", wastageCostLimit) 
+	}
+
+
+
+	wastageCost, guaranteedUsageCost, actualUsageCost := datadog.GetWastageCostForDeployment(test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("CLUSTER"), ResourceCostPerUnit)
 	wastageCostLimit, ok := check.Schema["limit"].(float64); 
 	if !ok {
  	   return false, nil,fmt.Errorf("Limits not found for schema", wastageCostLimit) 
 	}
+	
 	totalGuranteedUsageCost := guaranteedUsageCost.Memory + guaranteedUsageCost.CPU
 	totalWastageCost := wastageCost.CPU + wastageCost.Memory
 	if int(totalWastageCost) > int(wastageCostLimit) {
@@ -318,11 +310,10 @@ func HandleResourceLimitsCheck(check *config.SchemaCheck, checkID string, test s
 	//var actualLimits float64;
 	var expectedResourceLimits datadog.ResourceLimits
 	if os.Getenv("MACHINE_STABILITY") == "dev" || os.Getenv("MACHINE_STABILITY") == "qa" {
-		expectedResourceLimits = datadog.GetResourceLimitsForDeployment(test.Resource.ObjectMeta.GetName(),test.Resource.ObjectMeta.GetNamespace(), os.Getenv("UPPER_CLUSTER"))
+		expectedResourceLimits = datadog.GetResourceLimits(test.Resource.ObjectMeta.GetName(), os.Getenv("UPPER_CLUSTER"))
 	} else  {
 		expectedResourceLimits = datadog.GetResourceLimitsForDeployment(test.Resource.ObjectMeta.GetName(), strings.ReplaceAll(test.Resource.ObjectMeta.GetNamespace(), "uat", ""), os.Getenv("CLUSTER"))
 	} 
-	fmt.Println(expectedResourceLimits)
 	actualResourceLimits  := datadog.GetResourceLimitsForDeployment(test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("CLUSTER"))
 	if int(actualResourceLimits.CPU) > int(expectedResourceLimits.CPU) && int(actualResourceLimits.Memory) > int(expectedResourceLimits.Memory) {
 		message := "CPU/Memory Limits are not within range"
@@ -365,7 +356,6 @@ func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test sc
 		return nil, nil
 	}
 	var passes bool
-	fmt.Println("I'm in dynamic check function", checkID)
 	var issues []jsonschema.ValError
 	if checkID == "HPALimits" {
 		passes, issues, err = HandleHPALimitsCheck(checkID, test)

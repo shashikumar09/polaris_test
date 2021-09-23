@@ -25,6 +25,12 @@ type QueryResponse struct {
 }
 
 
+
+type HPALimits struct {
+    Min float64
+    Max float64
+}
+
 type ResourceLimits struct {
     CPU float64
     Memory float64
@@ -47,9 +53,10 @@ type ResourceUsage struct {
 var (
     HPALimitsQuery string = "sum:kubernetes_state.hpa.max_replicas{*}by{hpa,kube_namespace,cluster_name}";
     ResourcesLimitsQuery  string = "avg:kubernetes.cpu.limits{*}by{kube_deployment,kube_namespace,cluster_name},avg:kubernetes.memory.limits{*}by{kube_deployment,kube_namespace,cluster_name}";
-    ReplicasCountQuery string = "avg:kubernetes_state.deployment.replicas{*}by{kube_deployment,kube_namespace,cluster_name}";
-    ResourceRequestsQuery string = "avg:kubernetes.cpu.requests{*}by{kube_deployment,kube_namespace,cluster_name},avg:kubernetes.memory.requests{*}by{kube_deployment,kube_namespace,cluster_name}";
-    ResourceUsageQuery string = "avg:kubernetes.cpu.usage.total{*}by{kube_deployment,kube_namespace,cluster_name},avg:kubernetes.memory.usage{*}by{kube_deployment,kube_namespace,cluster_name}";
+    ReplicasCountForDeploymentQuery string = "avg:kubernetes_state.deployment.replicas{*}by{kube_deployment,kube_namespace,cluster_name}";
+    ReplicasCountQuery string = "sum:kubernetes_state.deployment.replicas{*}by{kube_deployment,cluster_name}";
+    ResourceRequestsQuery string = "avg:kubernetes.cpu.requests{*}by{kube_deployment,kube_namespace,cluster_name}.rollup(avg, 2419200),avg:kubernetes.memory.requests{*}by{kube_deployment,kube_namespace,cluster_name}.rollup(avg, 2419200)";
+    ResourceUsageQuery string = "avg:kubernetes.cpu.usage.total{*}by{kube_deployment,kube_namespace,cluster_name}.rollup(avg, 2419200),avg:kubernetes.memory.usage{*}by{kube_deployment,kube_namespace,cluster_name}.rollup(avg, 2419200)";
 
     ResourceLimitsForDeployment QueryResponse;
     HPALimitsForDeployment QueryResponse;
@@ -61,7 +68,8 @@ var (
 func init() {
     ResourceLimitsForDeployment = queryTSMetricsFromDatadog(ResourcesLimitsQuery)
     HPALimitsForDeployment = queryTSMetricsFromDatadog(HPALimitsQuery)
-    ReplicasCountForDeployment = queryTSMetricsFromDatadog(ReplicasCountQuery)
+    ReplicasCountForDeployment = queryTSMetricsFromDatadog(ReplicasCountForDeploymentQuery)
+    ReplicasCount = queryTSMetricsFromDatadog(ReplicasCountQuery)
     ResourceRequestsForDeployment = queryTSMetricsFromDatadog(ResourceRequestsQuery)
     ResourceUsageForDeployment = queryTSMetricsFromDatadog(ResourceUsageQuery)
 }
@@ -121,18 +129,39 @@ func GetResourceLimitsForDeployment(deployment string, namespace string, cluster
 	if i.TagSet[1] == "kube_namespace:" + namespace  && i.TagSet[0] == "kube_deployment:" + deployment && i.TagSet[2] == "cluster_name:" + cluster {
 	    fmt.Println(i.Metric)
             if i.Metric == CPUMetric {
-                resourceLimits.CPU = i.PointList[0][1]
+                resourceLimits.CPU = i.PointList[len(I.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
 
             }else if i.Metric == MemoryMetric {
 
-                resourceLimits.Memory = i.PointList[0][1]
+                resourceLimits.Memory = i.PointList[len(I.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
 
            }
         }
     }
     return resourceLimits
     
-} 
+}
+func GetResourceLimits(deployment string,  cluster string) ResourceLimits {
+
+    var resourceLimits ResourceLimits;
+    var CPUMetric string = "kubernetes.cpu.limits"
+    var MemoryMetric string = "kubernetes.memory.limits"
+    for _,i:= range ResourceLimitsForDeployment.Series {
+	if  namespace  && i.TagSet[0] == "kube_deployment:" + deployment && i.TagSet[1] == "cluster_name:" + cluster {
+	    fmt.Println(i.Metric)
+            if i.Metric == CPUMetric {
+                resourceLimits.CPU = i.PointList[len(I.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
+
+            }else if i.Metric == MemoryMetric {
+
+                resourceLimits.Memory = i.PointList[len(I.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
+
+           }
+        }
+    }
+    return resourceLimits
+    
+}  
 
 
 func isDeploymentContainsHPA(deployment string, namespace string, cluster string) bool{
@@ -152,7 +181,7 @@ func FetchHPALimitForDeployment(deployment string, namespace string, cluster str
     var limit float64;
     for _, i:= range HPALimitsForDeployment.Series {
 	    if i.TagSet[1] == "kube_namespace:" + namespace && i.TagSet[0] == "hpa:hpa-" + deployment && i.TagSet[2] == "cluster_name:" + cluster {
-            limit = i.PointList[0][1]
+            limit = i.PointList[len(i.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
 
 	}
     }
@@ -164,7 +193,7 @@ func FetchRepicasCountForDeployment(deployment string, namespace string, cluster
     var replicaCount float64;
     for _, i:= range ReplicasCountForDeployment.Series {
 	    if i.TagSet[1] == "kube_namespace:" + namespace  && i.TagSet[0] == "kube_deployment:" + deployment && i.TagSet[2] == "cluster_name:" + cluster{
-	    replicaCount =  i.PointList[0][1]
+	    replicaCount =  i.PointList[len(i.PointList)-1][1] ///To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
 	    break;
         }
     }
@@ -173,21 +202,37 @@ func FetchRepicasCountForDeployment(deployment string, namespace string, cluster
 
 }
 
-func GetHPALimitsForDeployment(deployment string, namespace string, cluster string) float64{
+func GetHPALimitsForDeployment(deployment string, namespace string, cluster string) HPALimits{
     //It will check whether HPA defined or not. If defined it will return min/max limits. else it will return min as 1 max as replicas configured for deplyoment
-    
+    var HPALimits HPALimits;
+    HPALimits.Min = 1
     if isDeploymentContainsHPA(deployment, namespace, cluster) {
 	limit := FetchHPALimitForDeployment(deployment, namespace, cluster)
-        return limit
+        HPALimits.Max = limit
+        return HPALimits
 
      } else {
-	fmt.Println("came to else block", deployment, namespace)
         limit := FetchRepicasCountForDeployment(deployment, namespace, cluster)
-	fmt.Println(limit)
-	return limit
+        HPALimits.Max = limit
+	    return HPALimits
     }
 
 }
+
+//To get the average of entire upper cluster(Inlcuding all namespaces where given deployment running)
+func GetHPALimits(deployment string, cluster string) HPALimits {
+    var HPALimits HPALimits;
+    HPALimits.Min = 1
+    for _, i:= range ReplicasCount.Series {
+	    if i.TagSet[1] == i.TagSet[0] == "kube_deployment:" + deployment && i.TagSet[1] == "cluster_name:" + cluster{
+	    HPALimits.Max =  i.PointList[len(i.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
+	    break;
+        }
+    }
+    return HPALimits
+}
+
+
 
 
 func getResourceRequestsForDeployment(deployment string, namespace string, cluster string) ResourceRequests {
@@ -199,11 +244,11 @@ func getResourceRequestsForDeployment(deployment string, namespace string, clust
 	    if i.TagSet[1] == "kube_namespace:" + namespace  && i.TagSet[0] == "kube_deployment:" + deployment && i.TagSet[2] == "cluster_name:"+ cluster {
 	    fmt.Println(i.Metric)
             if i.Metric == CPUMetric {
-                resourceRequests.CPU = i.PointList[0][1]
+                resourceRequests.CPU = i.PointList[0][1] //Pointlist stored in [<timestamp> <value>] format
 
             }else if i.Metric == MemoryMetric {
 
-                resourceRequests.Memory = i.PointList[0][1]
+                resourceRequests.Memory = i.PointList[0][1] //Pointlist stored in [<timestamp> <value>] format
 
            }
         }
@@ -220,11 +265,11 @@ func getResourceUsageForDeployment(deployment string, namespace string, cluster 
 	    if i.TagSet[1] == "kube_namespace:" + namespace  && i.TagSet[0] == "kube_deployment:" + deployment && i.TagSet[2] == "cluster_name:" + cluster {
 	    fmt.Println(i.Metric)
             if i.Metric == CPUMetric {
-                resourceUsage.CPU = i.PointList[0][1]
+                resourceUsage.CPU = i.PointList[0][1] //Pointlist stored in [<timestamp> <value>] format
 
             }else if i.Metric == MemoryMetric {
 
-                resourceUsage.Memory = i.PointList[0][1]
+                resourceUsage.Memory = i.PointList[0][1] //Pointlist stored in [<timestamp> <value>] format
 
            }
         }
@@ -233,37 +278,36 @@ func getResourceUsageForDeployment(deployment string, namespace string, cluster 
     
 } 
     
- func getGuranteedRequestsCost(deployment string, namespace string, cluster string) ResourceCost {
+ func getGuranteedRequestsCost(deployment string, namespace string, cluster string, ResourceCostPerUnit ResourceCost) ResourceCost {
     //returns the guranteed usage by multiplying the requests defined with the cost per unit
     var GuaranteedRequestsCost ResourceCost;
     var resourceRequests ResourceRequests = getResourceRequestsForDeployment(deployment, namespace, cluster)
-    GuaranteedRequestsCost.CPU = resourceRequests.CPU * CPUCostPerCore
-    GuaranteedRequestsCost.Memory = (resourceRequests.Memory / 1073741824) * MemoryCostPerGB
-
+    GuaranteedRequestsCost.CPU = resourceRequests.CPU * ResourceCostPerUnit.CPU
+    GuaranteedRequestsCost.Memory = (resourceRequests.Memory / 1073741824) * ResourceCostPerUnit.Memory
     return GuaranteedRequestsCost
         
 }
 
     
-func getActualUsageCost(deployment string, namespace string, cluster string) ResourceCost {
+func getActualUsageCost(deployment string, namespace string, cluster string, ResourceCostPerUnit ResourceCost) ResourceCost {
     
     //returns the actual usage by multiplying actual usage with the cost per unit
     var resourceUsage ResourceUsage = getResourceUsageForDeployment(deployment, namespace, cluster)
     var ActualUsageCost ResourceCost;
-    ActualUsageCost.CPU = resourceUsage.CPU * CPUCostPerCore
-    ActualUsageCost.Memory = (resourceUsage.Memory / 1073741824) * MemoryCostPerGB
+    ActualUsageCost.CPU = resourceUsage.CPU * ResourceCostPerUnit.CPU
+    ActualUsageCost.Memory = (resourceUsage.Memory / 1073741824) * ResourceCostPerUnit.Memory
 
     return ActualUsageCost
 
 }
 
 
-func GetWastageCostForDeployment(deployment string, namespace string, cluster string) (ResourceCost, ResourceCost, ResourceCost) {
+func GetWastageCostForDeployment(deployment string, namespace string, cluster string, ResourceCostPerUnit ResourceCost) (ResourceCost, ResourceCost, ResourceCost) {
     //returns wastage for deployment
 
     var wastageCost ResourceCost;
-    var GuaranteedRequestsCost ResourceCost = getGuranteedRequestsCost(deployment, namespace, cluster)
-    var ActualUsageCost ResourceCost = getActualUsageCost(deployment, namespace, cluster)
+    var GuaranteedRequestsCost ResourceCost = getGuranteedRequestsCost(deployment, namespace, cluster, ResourceCostPerUnit)
+    var ActualUsageCost ResourceCost = getActualUsageCost(deployment, namespace, cluster, ResourceCostPerUnit)
     
     wastageCost.CPU = GuaranteedRequestsCost.CPU - ActualUsageCost.CPU
     wastageCost.Memory = GuaranteedRequestsCost.Memory - ActualUsageCost.Memory
