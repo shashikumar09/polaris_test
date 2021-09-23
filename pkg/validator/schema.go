@@ -255,7 +255,7 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 
 
 func HandleHPALimitsCheck(checkID string, test schemaTestCase) (bool, []jsonschema.ValError, error){
-	var upperClusterLimits  datadog.ResourceLimits;     
+	var upperClusterLimits  datadog.HPALimits;     
 	//var actualLimits float64;
 	if os.Getenv("MACHINE_STABILITY") == "dev" || os.Getenv("MACHINE_STABILITY") == "qa" {
 		upperClusterLimits = datadog.GetHPALimits(test.Resource.ObjectMeta.GetName(), os.Getenv("UPPER_CLUSTER"))
@@ -268,31 +268,31 @@ func HandleHPALimitsCheck(checkID string, test schemaTestCase) (bool, []jsonsche
 		return true, nil, nil
 	} else {
 		return false, nil, nil
-	}xx
+	}
 		
 }
 
 
 func HandleWastageCostCheck(check *config.SchemaCheck, checkID string, test schemaTestCase) (bool,   []jsonschema.ValError, error) {
-	
-	var ResourceCostPerUnit datadog.ResourceCost
+	var ResourceCostPerUnit datadog.ResourceCost;
+	var ok bool;
 	ResourceCostPerUnit.CPU, ok = check.Schema["memory"].(float64); 
 	if !ok {
- 	   return false, nil,fmt.Errorf("CPU cost pet unig not found for schema", wastageCostLimit) 
+ 	   return false, nil,fmt.Errorf("CPU cost pet unit not found for schema", ResourceCostPerUnit) 
 	}
 	ResourceCostPerUnit.Memory, ok = check.Schema["cpu"].(float64);
 	if !ok {
- 	   return false, nil,fmt.Errorf("Memory cost pet unig not found for schema", wastageCostLimit) 
+ 	   return false, nil,fmt.Errorf("Memory cost pet unit not found for schema", ResourceCostPerUnit) 
 	}
 
 
 
-	wastageCost, guaranteedUsageCost, actualUsageCost := datadog.GetWastageCostForDeployment(test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("CLUSTER"), ResourceCostPerUnit)
-	wastageCostLimit, ok := check.Schema["limit"].(float64); 
+	wastageCost, guaranteedUsageCost, actualUsageCost := datadog.GetWastageCostForDeployment(test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("CLUSTER"), ResourceCostPerUnit);
+	var wastageCostLimit float64;
+	wastageCostLimit, ok = check.Schema["limit"].(float64);
 	if !ok {
- 	   return false, nil,fmt.Errorf("Limits not found for schema", wastageCostLimit) 
+	   return false, nil,fmt.Errorf("Limits not found for schema", wastageCostLimit) 
 	}
-	
 	totalGuranteedUsageCost := guaranteedUsageCost.Memory + guaranteedUsageCost.CPU
 	totalWastageCost := wastageCost.CPU + wastageCost.Memory
 	if int(totalWastageCost) > int(wastageCostLimit) {

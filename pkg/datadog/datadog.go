@@ -61,6 +61,7 @@ var (
     ResourceLimitsForDeployment QueryResponse;
     HPALimitsForDeployment QueryResponse;
     ReplicasCountForDeployment QueryResponse;
+    ReplicasCount QueryResponse;
     ResourceRequestsForDeployment QueryResponse;
     ResourceUsageForDeployment QueryResponse;
 )
@@ -129,11 +130,11 @@ func GetResourceLimitsForDeployment(deployment string, namespace string, cluster
 	if i.TagSet[1] == "kube_namespace:" + namespace  && i.TagSet[0] == "kube_deployment:" + deployment && i.TagSet[2] == "cluster_name:" + cluster {
 	    fmt.Println(i.Metric)
             if i.Metric == CPUMetric {
-                resourceLimits.CPU = i.PointList[len(I.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
+                resourceLimits.CPU = i.PointList[len(i.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
 
             }else if i.Metric == MemoryMetric {
 
-                resourceLimits.Memory = i.PointList[len(I.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
+                resourceLimits.Memory = i.PointList[len(i.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
 
            }
         }
@@ -147,14 +148,13 @@ func GetResourceLimits(deployment string,  cluster string) ResourceLimits {
     var CPUMetric string = "kubernetes.cpu.limits"
     var MemoryMetric string = "kubernetes.memory.limits"
     for _,i:= range ResourceLimitsForDeployment.Series {
-	if  namespace  && i.TagSet[0] == "kube_deployment:" + deployment && i.TagSet[1] == "cluster_name:" + cluster {
-	    fmt.Println(i.Metric)
+	if  i.TagSet[0] == "kube_deployment:" + deployment && i.TagSet[1] == "cluster_name:" + cluster {
             if i.Metric == CPUMetric {
-                resourceLimits.CPU = i.PointList[len(I.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
+                resourceLimits.CPU = i.PointList[len(i.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
 
             }else if i.Metric == MemoryMetric {
 
-                resourceLimits.Memory = i.PointList[len(I.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
+                resourceLimits.Memory = i.PointList[len(i.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
 
            }
         }
@@ -224,7 +224,7 @@ func GetHPALimits(deployment string, cluster string) HPALimits {
     var HPALimits HPALimits;
     HPALimits.Min = 1
     for _, i:= range ReplicasCount.Series {
-	    if i.TagSet[1] == i.TagSet[0] == "kube_deployment:" + deployment && i.TagSet[1] == "cluster_name:" + cluster{
+	    if i.TagSet[0] == "kube_deployment:" + deployment && i.TagSet[1] == "cluster_name:" + cluster{
 	    HPALimits.Max =  i.PointList[len(i.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
 	    break;
         }
