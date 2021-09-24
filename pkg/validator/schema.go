@@ -254,9 +254,12 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 
 
 
-func HandleHPALimitsCheck(checkID string, test schemaTestCase) (bool, []jsonschema.ValError, error){
-	var upperClusterLimits  datadog.HPALimits;     
-	//var actualLimits float64;
+func HandleHPALimitsCheck(check *config.SchemaCheck, checkID string, test schemaTestCase) (bool, []jsonschema.ValError, error){
+	var upperClusterLimits  datadog.HPALimits;
+	capacityLimit, ok := check.Schema["capacityLimit"].(float64);
+	if !ok {
+	   return false, nil,fmt.Errorf("capacity Limit not found for schema", checkID)
+	}
 	if os.Getenv("MACHINE_STABILITY") == "dev" || os.Getenv("MACHINE_STABILITY") == "qa" {
 		upperClusterLimits = datadog.GetHPALimits(test.Resource.ObjectMeta.GetName(), os.Getenv("UPPER_CLUSTER"))
 	} else if os.Getenv("MACHINE_STABILITY") == "uat" {
@@ -264,7 +267,7 @@ func HandleHPALimitsCheck(checkID string, test schemaTestCase) (bool, []jsonsche
 		
 	}
 	actualLimits  := datadog.GetHPALimitsForDeployment(test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("CLUSTER"))
-	if  int(actualLimits.Max) < int(upperClusterLimits.Max){
+	if  int(actualLimits.Max) < int(upperClusterLimits.Max * capacityLimit){
 		return true, nil, nil
 	} else {
 		return false, nil, nil
@@ -309,40 +312,22 @@ func HandleWastageCostCheck(check *config.SchemaCheck, checkID string, test sche
 func HandleResourceLimitsCheck(check *config.SchemaCheck, checkID string, test schemaTestCase) (bool, []jsonschema.ValError, error) {
 	//var actualLimits float64;
 	var expectedResourceLimits datadog.ResourceLimits
+	capacityLimit, ok := check.Schema["capacityLimit"].(float64);
+	if !ok {
+	   return false, nil,fmt.Errorf("capacity Limit not found for schema", checkID)
+	}
 	if os.Getenv("MACHINE_STABILITY") == "dev" || os.Getenv("MACHINE_STABILITY") == "qa" {
 		expectedResourceLimits = datadog.GetResourceLimits(test.Resource.ObjectMeta.GetName(), os.Getenv("UPPER_CLUSTER"))
 	} else  {
 		expectedResourceLimits = datadog.GetResourceLimitsForDeployment(test.Resource.ObjectMeta.GetName(), strings.ReplaceAll(test.Resource.ObjectMeta.GetNamespace(), "uat", ""), os.Getenv("CLUSTER"))
 	} 
 	actualResourceLimits  := datadog.GetResourceLimitsForDeployment(test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("CLUSTER"))
-	if int(actualResourceLimits.CPU) > int(expectedResourceLimits.CPU) && int(actualResourceLimits.Memory) > int(expectedResourceLimits.Memory) {
-		message := "CPU/Memory Limits are not within range"
-		check.FailureMessage = message
+	if int(actualResourceLimits.CPU) > int(expectedResourceLimits.CPU)*int(capacityLimit) && int(actualResourceLimits.Memory) > int(expectedResourceLimits.Memory)*int(capacityLimit) {
+		check.FailureMessage = "CPU/Memory limits are not within range (CPU: " + fmt.Sprintf("%f", actualResourceLimits.CPU) + " Memory: " + fmt.Sprintf("%f", actualResourceLimits.Memory) + ")"
 		return false, nil, nil
-	} else if int(actualResourceLimits.CPU) > int(expectedResourceLimits.CPU) {
-		message := "CPU Limits are not within range"
-		check.FailureMessage = message
-		return false, nil, nil
-	} else if int(actualResourceLimits.Memory) > int(expectedResourceLimits.Memory) {
-		message := "Memory Limits are not within range"
-		check.FailureMessage = message
-		return false, nil, nil
-	} else if int(actualResourceLimits.CPU) <= int(expectedResourceLimits.CPU) || int(actualResourceLimits.Memory) <= int(expectedResourceLimits.Memory) {
-		message := "CPU/Memory Limits are within range"
-		check.FailureMessage = message
-		return true, nil, nil
-	} else if int(actualResourceLimits.CPU) <= int(expectedResourceLimits.CPU) {
-		message := "CPU Limits within range"
-		check.FailureMessage = message
-		return true, nil, nil
 	} else {
-
-		message := "Memory Limits within range"
-		check.FailureMessage = message
-		return true, nil, nil
+		return true, nil,nil
 	}
-
-
 }
 
 func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test schemaTestCase) (*ResultMessage, error) {
@@ -358,7 +343,7 @@ func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test sc
 	var passes bool
 	var issues []jsonschema.ValError
 	if checkID == "HPALimits" {
-		passes, issues, err = HandleHPALimitsCheck(checkID, test)
+		passes, issues, err = HandleHPALimitsCheck(check, checkID, test)
 		if err != nil {
 			return nil, err
 		}
