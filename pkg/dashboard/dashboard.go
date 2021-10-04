@@ -29,6 +29,7 @@ import (
 	packr "github.com/gobuffalo/packr/v2"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
+	"github.com/go-redis/redis"
 )
 
 const (
@@ -51,6 +52,21 @@ var (
 	assetBox    = (*packr.Box)(nil)
 	markdownBox = (*packr.Box)(nil)
 )
+
+var myCache *redis.Client
+
+
+
+
+func InitRedisCache() {
+ 	myCache = redis.NewClient(&redis.Options{
+                Addr: "localhost:6379",
+                Password: "",
+                DB: 0,
+    })
+
+}
+
 
 // GetAssetBox returns a binary-friendly set of assets packaged from disk
 func GetAssetBox() *packr.Box {
@@ -155,11 +171,10 @@ func GetRouter(c config.Configuration, auditPath string, port int, basePath stri
 	router := mux.NewRouter().PathPrefix(basePath).Subrouter()
 	fileServer := http.FileServer(GetAssetBox())
 	router.PathPrefix("/static/").Handler(http.StripPrefix(path.Join(basePath, "/static/"), fileServer))
-
+	InitRedisCache()
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
-
 	router.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		favicon, err := GetAssetBox().Find("favicon-32x32.png")
 		if err != nil {
@@ -197,15 +212,18 @@ func GetRouter(c config.Configuration, auditPath string, port int, basePath stri
 		category := vars["category"]
 		category = strings.Replace(category, ".md", "", -1)
 	})
-
+	
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" && r.URL.Path != basePath {
 			http.NotFound(w, r)
 			return
 		}
 		adjustedConf := getConfigForQuery(c, r.URL.Query())
+		val := myCache.Get("AudiData")
+		var auditDataCache  *validator.AuditData
+    		json.Unmarshal([]byte(val.Val()), &auditDataCache)
 
-		if auditData == nil {
+		if auditDataCache == nil {
 			k, err := kube.CreateResourceProvider(r.Context(), auditPath, "", c)
 			if err != nil {
 				logrus.Errorf("Error fetching Kubernetes resources %v", err)
@@ -215,15 +233,24 @@ func GetRouter(c config.Configuration, auditPath string, port int, basePath stri
 
 			var auditData validator.AuditData
 			auditData, err = validator.RunAudit(adjustedConf, k)
-			fmt.Println(auditData)
 			if err != nil {
 				logrus.Errorf("Error getting audit data: %v", err)
 				http.Error(w, "Error running audit", 500)
 				return
 			}
+		        js, err := json.Marshal(auditData)
+    			if err != nil {
+        			fmt.Println(err)
+    			}
+
+    			err = myCache.Set("AudiData", js, 0).Err()
+    			if err != nil {
+        			fmt.Println(err)
+   	     		}
+
 			MainHandler(w, r, adjustedConf, auditData, basePath)
 		} else {
-			MainHandler(w, r, adjustedConf, *auditData, basePath)
+			MainHandler(w, r, adjustedConf, *auditDataCache, basePath)
 		}
 
 	})
