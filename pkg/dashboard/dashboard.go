@@ -23,6 +23,7 @@ import (
 	"path"
 	"strings"
 	"fmt"
+	"time"
 	"github.com/fairwindsops/polaris/pkg/config"
 	"github.com/fairwindsops/polaris/pkg/kube"
 	"github.com/fairwindsops/polaris/pkg/validator"
@@ -167,7 +168,7 @@ func stripUnselectedNamespaces(data *validator.AuditData, selectedNamespaces []s
 }
 
 // GetRouter returns a mux router serving all routes necessary for the dashboard
-func GetRouter(c config.Configuration, auditPath string, port int, basePath string, auditData *validator.AuditData) *mux.Router {
+func GetRouter(c config.Configuration, auditPath string, port int, basePath string, auditData *validator.AuditData, cacheTime int) *mux.Router {
 	router := mux.NewRouter().PathPrefix(basePath).Subrouter()
 	fileServer := http.FileServer(GetAssetBox())
 	router.PathPrefix("/static/").Handler(http.StripPrefix(path.Join(basePath, "/static/"), fileServer))
@@ -219,7 +220,7 @@ func GetRouter(c config.Configuration, auditPath string, port int, basePath stri
 			return
 		}
 		adjustedConf := getConfigForQuery(c, r.URL.Query())
-		val := myCache.Get("AudiData")
+		val := myCache.Get("AuditData")
 		var auditDataCache  *validator.AuditData
     		json.Unmarshal([]byte(val.Val()), &auditDataCache)
 
@@ -243,13 +244,14 @@ func GetRouter(c config.Configuration, auditPath string, port int, basePath stri
         			fmt.Println(err)
     			}
 
-    			err = myCache.Set("AudiData", js, 0).Err()
+    			err = myCache.Set("AuditData", js, time.Duration(cacheTime) * time.Minute).Err()
     			if err != nil {
         			fmt.Println(err)
    	     		}
-
+			fmt.Println("Not using Cache", auditData)
 			MainHandler(w, r, adjustedConf, auditData, basePath)
 		} else {
+			fmt.Println("Using Cache",  *auditDataCache)
 			MainHandler(w, r, adjustedConf, *auditDataCache, basePath)
 		}
 
@@ -280,7 +282,6 @@ func MainHandler(w http.ResponseWriter, r *http.Request, c config.Configuration,
 		Config:            c,
 	}
 	tmpl, err := GetBaseTemplate("main")
-	fmt.Println(tmpl)
 	if err != nil {
 		logrus.Printf("Error getting template data %v", err)
 		http.Error(w, "Error getting template data", 500)

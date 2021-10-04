@@ -28,6 +28,7 @@ var serverPort int
 var basePath string
 var loadAuditFile string
 var listeningAddress string
+var cacheTime int
 
 func init() {
 	rootCmd.AddCommand(dashboardCmd)
@@ -37,7 +38,7 @@ func init() {
 	dashboardCmd.PersistentFlags().StringVar(&loadAuditFile, "load-audit-file", "", "Runs the dashboard with data saved from a past audit.")
 	dashboardCmd.PersistentFlags().StringVar(&auditPath, "audit-path", "", "If specified, audits one or more YAML files instead of a cluster.")
 	dashboardCmd.PersistentFlags().StringVar(&displayName, "display-name", "", "An optional identifier for the audit.")
-
+	dashboardCmd.PersistentFlags().IntVarP(&cacheTime, "cache-time","ct", 5, "Cache time in minutes.")
 }
 
 var dashboardCmd = &cobra.Command{
@@ -54,7 +55,7 @@ var dashboardCmd = &cobra.Command{
 			auditData := validator.ReadAuditFromFile(loadAuditFile)
 			auditDataPtr = &auditData
 		}
-		router := dashboard.GetRouter(config, auditPath, serverPort, basePath, auditDataPtr)
+		router := dashboard.GetRouter(config, auditPath, serverPort, basePath, auditDataPtr, cacheTime)
 		router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("OK"))
 		})
