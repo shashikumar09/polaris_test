@@ -3,6 +3,7 @@ module github.com/fairwindsops/polaris
 go 1.15
 
 require (
+	github.com/DataDog/datadog-api-client-go v1.4.0 // indirect
 	github.com/fatih/color v1.13.0
 	github.com/go-redis/redis v6.15.9+incompatible // indirect
 	github.com/gobuffalo/packr/v2 v2.8.1
