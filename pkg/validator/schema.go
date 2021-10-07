@@ -66,7 +66,7 @@ func makeResult(conf *config.Configuration, check *config.SchemaCheck, passes bo
 	}
 	result := ResultMessage{
 		ID:       check.ID,
-		Severity: "warning",
+		Severity: conf.Checks[check.ID] ,
 		Category: check.Category,
 		Success:  passes,
 		// FIXME: need to fix the tests before adding this back

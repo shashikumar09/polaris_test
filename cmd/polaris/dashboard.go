@@ -38,7 +38,7 @@ func init() {
 	dashboardCmd.PersistentFlags().StringVar(&loadAuditFile, "load-audit-file", "", "Runs the dashboard with data saved from a past audit.")
 	dashboardCmd.PersistentFlags().StringVar(&auditPath, "audit-path", "", "If specified, audits one or more YAML files instead of a cluster.")
 	dashboardCmd.PersistentFlags().StringVar(&displayName, "display-name", "", "An optional identifier for the audit.")
-	dashboardCmd.PersistentFlags().IntVarP(&cacheTime, "cache-time","ct", 5, "Cache time in minutes.")
+	dashboardCmd.PersistentFlags().IntVarP(&cacheTime, "cache-time","t", 30, "Cache time in minutes.")
 }
 
 var dashboardCmd = &cobra.Command{

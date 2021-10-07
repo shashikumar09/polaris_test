@@ -1,4 +1,4 @@
-package main
+package datadog
 
 import (
     "context"
@@ -93,13 +93,12 @@ func queryTSMetricsFromDatadog(query string) QueryResponse {
         },
     )
     fmt.Println(query)
-    now := time.Now()
-    from := now.AddDate(0, -1, 0).Unix()
-    to := now.Unix()
-
     configuration := datadogClient.NewConfiguration()
     
     apiClient := datadogClient.NewAPIClient(configuration)
+    now := time.Now()
+    from := now.AddDate(0, -1, 0).Unix()
+    to := now.Unix()
     resp, r, err := apiClient.MetricsApi.QueryMetrics(ctx, from, to, query)
     if err != nil {
         fmt.Fprintf(os.Stderr, "Error when calling `MetricsApi.ListTagsByMetricName`: %v\n", err)
@@ -133,7 +132,6 @@ func GetResourceLimitsForDeployment(deployment string, namespace string, cluster
     var MemoryMetric string = "kubernetes.memory.limits"
     for _,i:= range ResourceLimitsForDeployment.Series {
 	if i.TagSet[1] == "kube_namespace:" + namespace  && i.TagSet[0] == "kube_deployment:" + deployment && i.TagSet[2] == "cluster_name:" + cluster {
-	    fmt.Println(i.Metric)
             if i.Metric == CPUMetric {
                 resourceLimits.CPU = i.PointList[len(i.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
 
@@ -154,7 +152,6 @@ func GetResourceLimits(deployment string,  cluster string) ResourceLimits {
     var MemoryMetric string = "kubernetes.memory.limits"
     for _,i:= range ResourceLimitsData.Series {
 	if  i.TagSet[1] == "kube_deployment:" + deployment && i.TagSet[0] == "cluster_name:" + cluster {
-		fmt.Println("Inside If")
             if i.Metric == CPUMetric {
                 resourceLimits.CPU = i.PointList[len(i.PointList)-1][1] //To get the latest timestamp value. Pointlist stored in [<timestamp> <value>] format
 
@@ -246,12 +243,9 @@ func getResourceRequestsForDeployment(deployment string, namespace string, clust
     var resourceRequests ResourceRequests;
     var CPUMetric string = "kubernetes.cpu.requests";
     var MemoryMetric string = "kubernetes.memory.requests";
-    fmt.Println(ResourceRequestsForDeployment.Series)
     for _,i:= range ResourceRequestsForDeployment.Series {
-	    fmt.Println(i.TagSet)
 	    if i.TagSet[2] == "kube_namespace:" + namespace  && i.TagSet[1] == "kube_deployment:" + deployment && i.TagSet[0] == "cluster_name:"+ cluster {
-	    fmt.Println(i.Metric)
-            if i.Metric == CPUMetric {
+            	if i.Metric == CPUMetric {
                 resourceRequests.CPU = i.PointList[0][1] //Pointlist stored in [<timestamp> <value>] format
 
             }else if i.Metric == MemoryMetric {
@@ -271,7 +265,6 @@ func getResourceUsageForDeployment(deployment string, namespace string, cluster 
     var MemoryMetric string = "kubernetes.memory.usage"
     for _,i:= range ResourceUsageForDeployment.Series {
 	    if i.TagSet[2] == "kube_namespace:" + namespace  && i.TagSet[1] == "kube_deployment:" + deployment && i.TagSet[0] == "cluster_name:" + cluster {
-	    fmt.Println(i.Metric)
             if i.Metric == CPUMetric {
                 resourceUsage.CPU = i.PointList[0][1] //Pointlist stored in [<timestamp> <value>] format
 
@@ -290,7 +283,6 @@ func getResourceUsageForDeployment(deployment string, namespace string, cluster 
     //returns the guranteed usage by multiplying the requests defined with the cost per unit
     var GuaranteedRequestsCost ResourceCost;
     var resourceRequests ResourceRequests = getResourceRequestsForDeployment(deployment, namespace, cluster)
-    fmt.Println(resourceRequests)
     GuaranteedRequestsCost.CPU = (resourceRequests.CPU/1000000000)* ResourceCostPerUnit.CPU
     GuaranteedRequestsCost.Memory = (resourceRequests.Memory / 1073741824) * ResourceCostPerUnit.Memory
     return GuaranteedRequestsCost
@@ -319,11 +311,7 @@ func GetWastageCostForDeployment(deployment string, namespace string, cluster st
     var ActualUsageCost ResourceCost = getActualUsageCost(deployment, namespace, cluster, ResourceCostPerUnit)
     
     wastageCost.CPU = GuaranteedRequestsCost.CPU - ActualUsageCost.CPU
-    fmt.Println(wastageCost.CPU)
-    fmt.Println(GuaranteedRequestsCost.CPU - ActualUsageCost.CPU, wastageCost.CPU, GuaranteedRequestsCost.CPU, ActualUsageCost.CPU)
     wastageCost.Memory = GuaranteedRequestsCost.Memory - ActualUsageCost.Memory
-    fmt.Println(GuaranteedRequestsCost.Memory - ActualUsageCost.Memory, wastageCost.Memory, GuaranteedRequestsCost.Memory, ActualUsageCost.Memory)
-    fmt.Println(wastageCost, GuaranteedRequestsCost,ActualUsageCost)
     return wastageCost, GuaranteedRequestsCost, ActualUsageCost
 
 }

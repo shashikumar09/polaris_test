@@ -24,6 +24,7 @@ import (
 	"strings"
 	"fmt"
 	"time"
+	"os"
 	"github.com/fairwindsops/polaris/pkg/config"
 	"github.com/fairwindsops/polaris/pkg/kube"
 	"github.com/fairwindsops/polaris/pkg/validator"
@@ -57,17 +58,27 @@ var (
 var myCache *redis.Client
 
 
-
-
 func InitRedisCache() {
+	var (
+		host     = getEnv("REDIS_HOST", "localhost")
+		port     = string(getEnv("REDIS_PORT", "6379"))
+		password = getEnv("REDIS_PASSWORD", "")
+	)
+
  	myCache = redis.NewClient(&redis.Options{
-                Addr: "localhost:6379",
-                Password: "",
+                Addr: host + ":" + port,
+                Password: password,
                 DB: 0,
     })
 
 }
-
+func getEnv(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	return value
+}
 
 // GetAssetBox returns a binary-friendly set of assets packaged from disk
 func GetAssetBox() *packr.Box {
@@ -248,10 +259,10 @@ func GetRouter(c config.Configuration, auditPath string, port int, basePath stri
     			if err != nil {
         			fmt.Println(err)
    	     		}
-			fmt.Println("Not using Cache", auditData)
+			fmt.Println("Not using Cache")
 			MainHandler(w, r, adjustedConf, auditData, basePath)
 		} else {
-			fmt.Println("Using Cache",  *auditDataCache)
+			fmt.Println("Using Cache")
 			MainHandler(w, r, adjustedConf, *auditDataCache, basePath)
 		}
 
@@ -262,7 +273,6 @@ func GetRouter(c config.Configuration, auditPath string, port int, basePath stri
 // MainHandler gets template data and renders the dashboard with it.
 func MainHandler(w http.ResponseWriter, r *http.Request, c config.Configuration, auditData validator.AuditData, basePath string) {
 	jsonData, err := json.Marshal(auditData.GetSummary())
-	fmt.Println(jsonData)
 	if err != nil {
 		http.Error(w, "Error serializing audit data", 500)
 		return
