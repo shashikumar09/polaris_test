@@ -59,7 +59,7 @@ func resolveCheck(conf *config.Configuration, checkID string, test schemaTestCas
 	}
 }
 
-func makeResult(conf *config.Configuration, check *config.SchemaCheck, passes bool, issues []jsonschema.ValError) ResultMessage {
+func makeResult(conf *config.Configuration, check *config.SchemaCheck, passes bool, issues []jsonschema.ValError, data int) ResultMessage {
 	details := []string{}
 	for _, issue := range issues {
 		details = append(details, issue.Message)
@@ -69,6 +69,7 @@ func makeResult(conf *config.Configuration, check *config.SchemaCheck, passes bo
 		Severity: conf.Checks[check.ID] ,
 		Category: check.Category,
 		Success:  passes,
+		Data: data, //applicable for only wastageCost check for remainig checks it will be zero
 		// FIXME: need to fix the tests before adding this back
 		//Details: details,
 	}
@@ -250,10 +251,6 @@ func applySchemaChecks(conf *config.Configuration, test schemaTestCase) (ResultS
 }
 
 
-
-
-
-
 func HandleHPALimitsCheck(check *config.SchemaCheck, checkID string, test schemaTestCase) (bool, []jsonschema.ValError, error){
 	var upperClusterLimits  datadog.HPALimits;
 	capacityLimit, ok := check.Schema["capacityLimit"].(float64);
@@ -276,36 +273,36 @@ func HandleHPALimitsCheck(check *config.SchemaCheck, checkID string, test schema
 }
 
 
-func HandleWastageCostCheck(check *config.SchemaCheck, checkID string, test schemaTestCase) (bool,   []jsonschema.ValError, error) {
+func HandleWastageCostCheck(check *config.SchemaCheck, checkID string, test schemaTestCase) (bool, int,   []jsonschema.ValError, error) {
 	var ResourceCostPerUnit datadog.ResourceCost;
+	var totalWastageCost float64
 	var ok bool;
 	ResourceCostPerUnit.CPU, ok = check.Schema["memory"].(float64); 
 	if !ok {
- 	   return false, nil,fmt.Errorf("CPU cost pet unit not found for schema", ResourceCostPerUnit) 
+ 	   return false, int(totalWastageCost), nil,fmt.Errorf("CPU cost pet unit not found for schema", ResourceCostPerUnit) 
 	}
 	ResourceCostPerUnit.Memory, ok = check.Schema["cpu"].(float64);
 	if !ok {
- 	   return false, nil,fmt.Errorf("Memory cost pet unit not found for schema", ResourceCostPerUnit) 
+ 	   return false, int(totalWastageCost), nil,fmt.Errorf("Memory cost pet unit not found for schema", ResourceCostPerUnit) 
 	}
 
 
-
-	wastageCost, guaranteedUsageCost, actualUsageCost := datadog.GetWastageCostForDeployment(test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("CLUSTER"), ResourceCostPerUnit);
+	wastageCost, guaranteedUsageCost, actualUsageCost := datadog.GetWastageCostForController(test.Resource.Kind, test.Resource.ObjectMeta.GetName(), test.Resource.ObjectMeta.GetNamespace(), os.Getenv("CLUSTER"), ResourceCostPerUnit);
 	var wastageCostLimit float64;
 	wastageCostLimit, ok = check.Schema["limit"].(float64);
 	if !ok {
-	   return false, nil,fmt.Errorf("Limits not found for schema", wastageCostLimit) 
+	   return false, int(totalWastageCost), nil,fmt.Errorf("Limits not found for schema", wastageCostLimit) 
 	}
 	totalGuranteedUsageCost := guaranteedUsageCost.Memory + guaranteedUsageCost.CPU
-	totalWastageCost := wastageCost.CPU + wastageCost.Memory
+	totalWastageCost = wastageCost.CPU + wastageCost.Memory
 	if int(totalWastageCost) > int(wastageCostLimit) {
-		message := "wastage cost is $" + fmt.Sprintf("%f", totalWastageCost) + "/m (Memory/CPU requests - Actual usage)($" + fmt.Sprintf("%f" , totalGuranteedUsageCost) + " -$" + fmt.Sprintf("%f", actualUsageCost)+ ")"
+		message := "Wastage cost is $" + fmt.Sprintf("%f", totalWastageCost) + "/m (Memory/CPU requests - Actual usage)($" + fmt.Sprintf("%f" , totalGuranteedUsageCost) + " -$" + fmt.Sprintf("%f", actualUsageCost)+ ")"
 		check.FailureMessage = message
-		return false,  nil, nil
+		return false, int(totalWastageCost),  nil, nil
 	} else {
-		message := "No wastage"
+		message := "Wastage cost is within limit"
 		check.SuccessMessage = message
-		return true, nil, nil
+		return true, int(totalWastageCost), nil, nil
 	}
 }
 
@@ -340,6 +337,7 @@ func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test sc
 	} else if check == nil {
 		return nil, nil
 	}
+	var data int
 	var passes bool
 	var issues []jsonschema.ValError
 	if checkID == "HPALimits" {
@@ -348,7 +346,7 @@ func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test sc
 			return nil, err
 		}
 	} else if checkID == "WastageCost" {
-		passes, issues, err = HandleWastageCostCheck(check, checkID, test)
+		passes, data, issues, err = HandleWastageCostCheck(check, checkID, test)
 		if err != nil {
 			return nil, err
 		}
@@ -360,7 +358,7 @@ func applyDynamicSchemaCheck(conf *config.Configuration, checkID string, test sc
 	} else {
 		return nil, nil
 	}
-	result := makeResult(conf, check, passes, issues)
+	result := makeResult(conf, check, passes, issues, data)
 	return &result, nil		
 }
 
@@ -371,6 +369,7 @@ func applySchemaCheck(conf *config.Configuration, checkID string, test schemaTes
 	} else if check == nil {
 		return nil, nil
 	}
+	var data int
 	var passes bool
 	var issues []jsonschema.ValError
 	if check.SchemaTarget != "" {
@@ -412,7 +411,7 @@ func applySchemaCheck(conf *config.Configuration, checkID string, test schemaTes
 			return nil, err
 		}
 	}
-	result := makeResult(conf, check, passes, issues)
+	result := makeResult(conf, check, passes, issues, data)
 	return &result, nil
 }
 
@@ -424,3 +423,69 @@ func getSortedKeys(m map[string]config.Severity) []string {
 	sort.Strings(keys)
 	return keys
 }
+
+func GetWastageCostOverview(conf *config.Configuration,resourceProvider *kube.ResourceProvider, results []Result) datadog.WastageCostOverview {
+
+    var wastageCostOverview datadog.WastageCostOverview
+	wastageCostOverview.Namespace = make(map[string]int)
+
+    for _, namespace := range resourceProvider.Namespaces {
+            wastageCostOverview.Namespace[namespace.String()] = GetWastageCostOnNamespace(results, namespace.String())
+    }
+	wastageCostOverview.Value = GetWastageCostOnCluster(wastageCostOverview)
+	return wastageCostOverview
+}
+
+func GetWastageCostOnNamespace(results []Result, namespace string) int {
+
+	var wastageCostOnNamespace int
+	for _, result := range results {
+		fmt.Println("checking", result.Name, result.Namespace) 
+		if result.Namespace == namespace {
+			fmt.Println("1st", result.Name,  namespace)
+			for _, check:= range result.Results{
+				fmt.Println("2nd", check.Data, namespace)
+				if check.ID == "WastageCost" {
+					wastageCostOnNamespace = wastageCostOnNamespace + check.Data
+				}
+			}
+		}
+	}
+	return wastageCostOnNamespace
+
+}
+
+func GetWastageCostOnCluster(wastageCostOverview datadog.WastageCostOverview) int {
+
+	var wastageCostOnCluster int
+	for  _, wastageCost := range wastageCostOverview.Namespace {
+		wastageCostOnCluster = wastageCostOnCluster + wastageCost
+
+	}
+	return wastageCostOnCluster
+}
+
+
+/*
+
+func GetWastageCost(conf *config.Configuration,resourceProvider *kube.ResourceProvider, resourceWastage datadog.ResourceUsage) int {
+	
+	var ResourceCostPerUnit datadog.ResourceCost;
+	var WastageCost datadog.ResourceCost;
+	var totalWastageCost int;
+	check, ok := conf.DynamicCustomChecks["WastageCost"]
+	ResourceCostPerUnit.CPU, ok = check.Schema["memory"].(float64); 
+	if !ok {
+ 	   return false, nil,fmt.Errorf("CPU cost pet unit not found for schema", ResourceCostPerUnit) 
+	}
+	ResourceCostPerUnit.Memory, ok = check.Schema["cpu"].(float64);
+	if !ok {
+ 	   return false, nil,fmt.Errorf("Memory cost pet unit not found for schema", ResourceCostPerUnit) 
+	}
+	WastageCost.CPU = (resourceWastage.CPU * ResourceCostPerUnit.CPU)
+	wastageCost.Memory = (resourceWastage.Memory * ResourceCostPerUnit.Memory)
+	totalWastageCost = WastageCost.CPU + WastageCost.Memory
+	return totalWastageCost, wastageCost
+
+}
+*/

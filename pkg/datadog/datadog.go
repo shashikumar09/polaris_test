@@ -25,7 +25,20 @@ type QueryResponse struct {
         } `json:"series"`
 }
 
+type TargetKind string
+var datadogKindDict map[string]string
+func init() {
+   datadogKindDict = make(map[string]string) 
+    datadogKindDict["Deployment"] = "kube_deployment:"
+    datadogKindDict["DaemonSet"] =  "kube_daemon_set:"
+    datadogKindDict["StatefulSet"] =  "kube_stateful_set:"
+    
+}
 
+type WastageCostOverview struct {
+	Value int
+	Namespace map[string]int
+}
 
 type HPALimits struct {
     Min float64
@@ -57,16 +70,20 @@ var (
     ResourcesLimitsQuery  string = "avg:kubernetes.cpu.limits{*}by{kube_deployment,cluster_name},avg:kubernetes.memory.limits{*}by{kube_deployment,cluster_name}";
     ReplicasCountForDeploymentQuery string = "avg:kubernetes_state.deployment.replicas{*}by{kube_deployment,kube_namespace,cluster_name}";
     ReplicasCountQuery string = "sum:kubernetes_state.deployment.replicas{*}by{kube_deployment,cluster_name}";
-    ResourceRequestsQuery string = "sum:kubernetes.cpu.requests{*}by{kube_deployment,kube_namespace,cluster_name}.rollup(avg, 86400),sum:kubernetes.memory.requests{*}by{kube_deployment,kube_namespace,cluster_name}.rollup(avg, 86400)";
-    ResourceUsageQuery string = "sum:kubernetes.cpu.usage.total{*}by{kube_deployment,kube_namespace,cluster_name}.rollup(avg, 86400),sum:kubernetes.memory.usage{*}by{kube_deployment,kube_namespace,cluster_name}.rollup(avg, 86400)";
+    ResourceRequestsQuery string = `sum:kubernetes.cpu.requests{*}by{kube_deployment,kube_namespace,cluster_name}.rollup(avg, 2419200),sum:kubernetes.memory.requests{*}by{kube_deployment,kube_namespace,cluster_name}.rollup(avg, 2419200),
+                                    sum:kubernetes.cpu.requests{*}by{kube_daemon_set,kube_namespace,cluster_name}.rollup(avg, 2419200),sum:kubernetes.memory.requests{*}by{kube_daemon_set,kube_namespace,cluster_name}.rollup(avg, 2419200),
+                                    sum:kubernetes.cpu.requests{*}by{kube_stateful_set,kube_namespace,cluster_name}.rollup(avg, 2419200),sum:kubernetes.memory.requests{*}by{kube_stateful_set,kube_namespace,cluster_name}.rollup(avg, 2419200)`
+    ResourceUsageQuery string = `sum:kubernetes.cpu.usage.total{*}by{kube_deployment,kube_namespace,cluster_name}.rollup(avg, 2419200),sum:kubernetes.memory.usage{*}by{kube_deployment,kube_namespace,cluster_name}.rollup(avg, 2419200),
+                                    sum:kubernetes.cpu.usage.total{*}by{kube_daemon_set,kube_namespace,cluster_name}.rollup(avg, 2419200),sum:kubernetes.memory.usage{*}by{kube_daemon_set,kube_namespace,cluster_name}.rollup(avg, 2419200),
+                                    sum:kubernetes.cpu.usage.total{*}by{kube_stateful_set,kube_namespace,cluster_name}.rollup(avg, 2419200),sum:kubernetes.memory.usage{*}by{kube_stateful_set,kube_namespace,cluster_name}.rollup(avg, 2419200)`
 
     ResourceLimitsForDeployment QueryResponse;
     ResourceLimitsData QueryResponse;
     HPALimitsForDeployment QueryResponse;
     ReplicasCountForDeployment QueryResponse;
     ReplicasCount QueryResponse;
-    ResourceRequestsForDeployment QueryResponse;
-    ResourceUsageForDeployment QueryResponse;
+    ResourceRequestsData QueryResponse;
+    ResourceUsageData QueryResponse;
 )
 
 func init() {
@@ -75,8 +92,8 @@ func init() {
     HPALimitsForDeployment = queryTSMetricsFromDatadog(HPALimitsQuery)
     ReplicasCountForDeployment = queryTSMetricsFromDatadog(ReplicasCountForDeploymentQuery)
     ReplicasCount = queryTSMetricsFromDatadog(ReplicasCountQuery)
-    ResourceRequestsForDeployment = queryTSMetricsFromDatadog(ResourceRequestsQuery)
-    ResourceUsageForDeployment = queryTSMetricsFromDatadog(ResourceUsageQuery)
+    ResourceRequestsData = queryTSMetricsFromDatadog(ResourceRequestsQuery)
+    ResourceUsageData = queryTSMetricsFromDatadog(ResourceUsageQuery)
 }
 
 func queryTSMetricsFromDatadog(query string) QueryResponse {
@@ -238,13 +255,13 @@ func GetHPALimits(deployment string, cluster string) HPALimits {
 
 
 
-func getResourceRequestsForDeployment(deployment string, namespace string, cluster string) ResourceRequests {
+func getResourceRequests(kind string, resource string, namespace string, cluster string) ResourceRequests {
 
     var resourceRequests ResourceRequests;
     var CPUMetric string = "kubernetes.cpu.requests";
     var MemoryMetric string = "kubernetes.memory.requests";
-    for _,i:= range ResourceRequestsForDeployment.Series {
-	    if i.TagSet[2] == "kube_namespace:" + namespace  && i.TagSet[1] == "kube_deployment:" + deployment && i.TagSet[0] == "cluster_name:"+ cluster {
+    for _,i:= range ResourceRequestsData.Series {
+	    if i.TagSet[2] == "kube_namespace:" + namespace  && i.TagSet[1] == datadogKindDict[kind] + resource && i.TagSet[0] == "cluster_name:"+ cluster {
             	if i.Metric == CPUMetric {
                 resourceRequests.CPU = i.PointList[0][1] //Pointlist stored in [<timestamp> <value>] format
 
@@ -259,12 +276,12 @@ func getResourceRequestsForDeployment(deployment string, namespace string, clust
     
 } 
 
-func getResourceUsageForDeployment(deployment string, namespace string, cluster string) ResourceUsage{
+func getResourceUsage(kind string, resource string, namespace string, cluster string) ResourceUsage{
     var resourceUsage ResourceUsage;
-    var CPUMetric string = "kubernetes.cpu.usage.total"
+    var CPUMetric string = "kubernetes.cpu.usage.total" 
     var MemoryMetric string = "kubernetes.memory.usage"
-    for _,i:= range ResourceUsageForDeployment.Series {
-	    if i.TagSet[2] == "kube_namespace:" + namespace  && i.TagSet[1] == "kube_deployment:" + deployment && i.TagSet[0] == "cluster_name:" + cluster {
+    for _,i:= range ResourceUsageData.Series {
+	    if i.TagSet[2] == "kube_namespace:" + namespace  && i.TagSet[1] == datadogKindDict[kind] + resource && i.TagSet[0] == "cluster_name:" + cluster {
             if i.Metric == CPUMetric {
                 resourceUsage.CPU = i.PointList[0][1] //Pointlist stored in [<timestamp> <value>] format
 
@@ -278,11 +295,65 @@ func getResourceUsageForDeployment(deployment string, namespace string, cluster 
     return resourceUsage
     
 } 
+/*
+func getResourceRequestsOnCluster(cluster string) ResourceRequests {
+
+    var resourceRequests ResourceRequests;
+    var CPUMetric string = "kubernetes.cpu.requests";
+    var MemoryMetric string = "kubernetes.memory.requests";
+    for _,i:= range ResourceRequests.Series {
+	    if  i.TagSet == ["cluster_name:"+ cluster] {
+            	if i.Metric == CPUMetric {
+                resourceRequests.CPU = i.PointList[0][1] //Pointlist stored in [<timestamp> <value>] format
+
+            }else if i.Metric == MemoryMetric {
+
+                resourceRequests.Memory = i.PointList[0][1] //Pointlist stored in [<timestamp> <value>] format
+
+           }
+        }
+    }
+    return resourceRequests
     
- func getGuranteedRequestsCost(deployment string, namespace string, cluster string, ResourceCostPerUnit ResourceCost) ResourceCost {
+} 
+func getResourceUsageOnCluster(cluster string) ResourceUsage{
+    var resourceUsage ResourceUsage;
+    var CPUMetric string = "kubernetes.cpu.usage.total"
+    var MemoryMetric string = "kubernetes.memory.usage"
+    for _,i:= range ResourceUsage.Series {
+	    if i.TagSet == ["cluster_name:" + cluster] {
+            if i.Metric == CPUMetric {
+                resourceUsage.CPU = i.PointList[0][1] //Pointlist stored in [<timestamp> <value>] format
+
+            }else if i.Metric == MemoryMetric {
+
+                resourceUsage.Memory = i.PointList[0][1] //Pointlist stored in [<timestamp> <value>] format
+
+           }
+        }
+    }
+    return resourceUsage 
+    
+} 
+
+func GetResourceWastageOnCluster(cluster string) ResourceCost {
+    
+    var resourceWastage ResourceCost;
+    var GuaranteedRequests ResourceRequests = getGuranteedRequestsOnCluster(cluster)
+    var ActualUsage ResourceUsage = getActualUsageOnCluster(cluster)
+    
+    resourceWastage.CPU = (GuaranteedRequests.CPU - ActualUsage.CPU)/1000000000
+    resourceWastage.Memory = GuaranteedRequests.Memory - ActualUsage.Memory)/1073741824
+    return resourceWastage
+
+}
+
+*/
+
+ func getGuranteedRequestsCost(kind string, deployment string, namespace string, cluster string, ResourceCostPerUnit ResourceCost) ResourceCost {
     //returns the guranteed usage by multiplying the requests defined with the cost per unit
     var GuaranteedRequestsCost ResourceCost;
-    var resourceRequests ResourceRequests = getResourceRequestsForDeployment(deployment, namespace, cluster)
+    var resourceRequests ResourceRequests = getResourceRequests(kind, deployment, namespace, cluster)
     GuaranteedRequestsCost.CPU = (resourceRequests.CPU/1000000000)* ResourceCostPerUnit.CPU
     GuaranteedRequestsCost.Memory = (resourceRequests.Memory / 1073741824) * ResourceCostPerUnit.Memory
     return GuaranteedRequestsCost
@@ -290,10 +361,10 @@ func getResourceUsageForDeployment(deployment string, namespace string, cluster 
 }
 
     
-func getActualUsageCost(deployment string, namespace string, cluster string, ResourceCostPerUnit ResourceCost) ResourceCost {
+func getActualUsageCost(kind string, deployment string, namespace string, cluster string, ResourceCostPerUnit ResourceCost) ResourceCost {
     
     //returns the actual usage by multiplying actual usage with the cost per unit
-    var resourceUsage ResourceUsage = getResourceUsageForDeployment(deployment, namespace, cluster)
+    var resourceUsage ResourceUsage = getResourceUsage(kind, deployment, namespace, cluster)
     var ActualUsageCost ResourceCost;
     ActualUsageCost.CPU = (resourceUsage.CPU/1000000000) * ResourceCostPerUnit.CPU
     ActualUsageCost.Memory = (resourceUsage.Memory / 1073741824) * ResourceCostPerUnit.Memory
@@ -303,12 +374,12 @@ func getActualUsageCost(deployment string, namespace string, cluster string, Res
 }
 
 
-func GetWastageCostForDeployment(deployment string, namespace string, cluster string, ResourceCostPerUnit ResourceCost) (ResourceCost, ResourceCost, ResourceCost) {
+func GetWastageCostForController(kind string, deployment string, namespace string, cluster string, ResourceCostPerUnit ResourceCost) (ResourceCost, ResourceCost, ResourceCost) {
     //returns wastage for deployment
 
     var wastageCost ResourceCost;
-    var GuaranteedRequestsCost ResourceCost = getGuranteedRequestsCost(deployment, namespace, cluster, ResourceCostPerUnit)
-    var ActualUsageCost ResourceCost = getActualUsageCost(deployment, namespace, cluster, ResourceCostPerUnit)
+    var GuaranteedRequestsCost ResourceCost = getGuranteedRequestsCost(kind, deployment, namespace, cluster, ResourceCostPerUnit)
+    var ActualUsageCost ResourceCost = getActualUsageCost(kind, deployment, namespace, cluster, ResourceCostPerUnit)
     
     wastageCost.CPU = GuaranteedRequestsCost.CPU - ActualUsageCost.CPU
     wastageCost.Memory = GuaranteedRequestsCost.Memory - ActualUsageCost.Memory
@@ -316,3 +387,57 @@ func GetWastageCostForDeployment(deployment string, namespace string, cluster st
 
 }
 
+/*
+func getResourceRequestsOnNamespace(namespace string, cluster string) ResourceRequests {
+
+    var resourceRequests ResourceRequests;
+    var CPUMetric string = "kubernetes.cpu.requests";
+    var MemoryMetric string = "kubernetes.memory.requests";
+    for _,i:= range ResourceRequests.Series {
+	    if  i.TagSet == ["cluster_name:"+ cluster, "kube_namespace:" + namespace] {
+            	if i.Metric == CPUMetric {
+                resourceRequests.CPU = i.PointList[0][1] //Pointlist stored in [<timestamp> <value>] format
+
+            }else if i.Metric == MemoryMetric {
+
+                resourceRequests.Memory = i.PointList[0][1] //Pointlist stored in [<timestamp> <value>] format
+
+           }
+        }
+    }
+    return resourceRequests
+    
+}
+
+func getResourceUsageOnNamespace(namespace string, cluster string) ResourceUsage{
+    var resourceUsage ResourceUsage;
+    var CPUMetric string = "kubernetes.cpu.usage.total"
+    var MemoryMetric string = "kubernetes.memory.usage"
+    for _,i:= range ResourceUsage.Series {
+	    if i.TagSet == ["cluster_name:" + cluster, "kube_namespace:" + namespace] {
+            if i.Metric == CPUMetric {
+                resourceUsage.CPU = i.PointList[0][1] //Pointlist stored in [<timestamp> <value>] format
+
+            }else if i.Metric == MemoryMetric {
+
+                resourceUsage.Memory = i.PointList[0][1] //Pointlist stored in [<timestamp> <value>] format
+
+           }
+        }
+    }
+    return resourceUsage 
+    
+} 
+
+func GetResourceWastageOnNamespace(namespace string, cluster string) ResourceCost {
+    
+    var resourceWastage ResourceCost;
+    var GuaranteedRequests ResourceRequests = getGuranteedRequestsOnNamespace(cluster)
+    var ActualUsage ResourceUsage = getActualUsageOnNamespace(cluster)
+    
+    resourceWastage.CPU = (GuaranteedRequests.CPU - ActualUsage.CPU)/1000000000
+    resourceWastage.Memory = (GuaranteedRequests.Memory - ActualUsage.Memory)/1073741824
+    return resourceWastage
+
+}
+*/

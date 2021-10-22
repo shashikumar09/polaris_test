@@ -22,6 +22,7 @@ import (
 	"github.com/thoas/go-funk"
 
 	"github.com/fairwindsops/polaris/pkg/config"
+	"github.com/fairwindsops/polaris/pkg/datadog"
 )
 
 const (
@@ -50,6 +51,7 @@ type AuditData struct {
 	ClusterInfo          ClusterInfo
 	Results              []Result
 	Score                uint
+	WastageCostOverview datadog.WastageCostOverview 
 }
 
 // RemoveSuccessfulResults remove all test that have passed.
@@ -78,6 +80,7 @@ type ResultMessage struct {
 	Success  bool
 	Severity config.Severity
 	Category string
+	Data int
 }
 
 // ResultSet contiains the results for a set of checks

@@ -231,8 +231,6 @@ func CreateResourceProviderFromCluster(ctx context.Context, c conf.Configuration
 	return CreateResourceProviderFromAPI(ctx, api, kubeConf.Host, &dynamicInterface, c)
 }
 
-
-
 // CreateResourceProviderFromAPI creates a new ResourceProvider from an existing k8s interface
 func CreateResourceProviderFromAPI(ctx context.Context, kube kubernetes.Interface, clusterName string, dynamic *dynamic.Interface, c conf.Configuration) (*ResourceProvider, error) {
 	listOpts := metav1.ListOptions{}

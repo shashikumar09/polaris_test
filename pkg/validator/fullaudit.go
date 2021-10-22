@@ -42,6 +42,7 @@ func RunAudit(config conf.Configuration, kubeResources *kube.ResourceProvider) (
 		Results: results,
 	}
 	auditData.Score = auditData.GetSummary().GetScore()
+	auditData.WastageCostOverview = GetWastageCostOverview(&config, kubeResources, results)
 	return auditData, nil
 }
 

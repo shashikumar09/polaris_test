@@ -175,6 +175,13 @@ func stripUnselectedNamespaces(data *validator.AuditData, selectedNamespaces []s
 			newResults = append(newResults, res)
 		}
 	}
+	var wastageCost int
+    for  namespace, cost := range data.WastageCostOverview.Namespace {
+        if stringInSlice(namespace,  selectedNamespaces) {
+            wastageCost += cost
+        }
+	}
+    data.WastageCostOverview.Value = wastageCost
 	data.Results = newResults
 }
 
