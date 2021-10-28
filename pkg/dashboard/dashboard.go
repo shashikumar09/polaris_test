@@ -16,6 +16,7 @@ package dashboard
 
 import (
 	"bytes"
+	"sync"
 	"encoding/json"
 	"html/template"
 	"net/http"
@@ -23,12 +24,14 @@ import (
 	"path"
 	"strings"
 	"fmt"
+	"time"
 	"github.com/fairwindsops/polaris/pkg/config"
 	"github.com/fairwindsops/polaris/pkg/kube"
 	"github.com/fairwindsops/polaris/pkg/validator"
 	packr "github.com/gobuffalo/packr/v2"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
+	"github.com/go-redis/redis"
 )
 
 const (
@@ -51,6 +54,21 @@ var (
 	assetBox    = (*packr.Box)(nil)
 	markdownBox = (*packr.Box)(nil)
 )
+
+var myCache *redis.Client
+
+
+
+
+func InitRedisCache() {
+ 	myCache = redis.NewClient(&redis.Options{
+                Addr: "redis-master:6379",
+                Password: "",
+                DB: 0,
+    })
+
+}
+
 
 // GetAssetBox returns a binary-friendly set of assets packaged from disk
 func GetAssetBox() *packr.Box {
@@ -151,15 +169,14 @@ func stripUnselectedNamespaces(data *validator.AuditData, selectedNamespaces []s
 }
 
 // GetRouter returns a mux router serving all routes necessary for the dashboard
-func GetRouter(c config.Configuration, auditPath string, port int, basePath string, auditData *validator.AuditData) *mux.Router {
+func GetRouter(c config.Configuration, auditPath string, port int, basePath string, auditData *validator.AuditData, cacheTime int) *mux.Router {
 	router := mux.NewRouter().PathPrefix(basePath).Subrouter()
 	fileServer := http.FileServer(GetAssetBox())
 	router.PathPrefix("/static/").Handler(http.StripPrefix(path.Join(basePath, "/static/"), fileServer))
-
+	InitRedisCache()
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
-
 	router.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		favicon, err := GetAssetBox().Find("favicon-32x32.png")
 		if err != nil {
@@ -197,15 +214,23 @@ func GetRouter(c config.Configuration, auditPath string, port int, basePath stri
 		category := vars["category"]
 		category = strings.Replace(category, ".md", "", -1)
 	})
-
+	
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		var wg = &sync.Mutex{}
 		if r.URL.Path != "/" && r.URL.Path != basePath {
 			http.NotFound(w, r)
 			return
 		}
 		adjustedConf := getConfigForQuery(c, r.URL.Query())
+		val := myCache.Get("AuditData")
+		var auditDataCache  *validator.AuditData
+    		json.Unmarshal([]byte(val.Val()), &auditDataCache)
+		if auditDataCache == nil {
 
-		if auditData == nil {
+			wg.Lock()
+			if  auditDataCache == nil {
+
+			fmt.Println("I'm called")
 			k, err := kube.CreateResourceProvider(r.Context(), auditPath, "", c)
 			if err != nil {
 				logrus.Errorf("Error fetching Kubernetes resources %v", err)
@@ -215,15 +240,35 @@ func GetRouter(c config.Configuration, auditPath string, port int, basePath stri
 
 			var auditData validator.AuditData
 			auditData, err = validator.RunAudit(adjustedConf, k)
-			fmt.Println(auditData)
 			if err != nil {
 				logrus.Errorf("Error getting audit data: %v", err)
 				http.Error(w, "Error running audit", 500)
 				return
 			}
+		        js, err := json.Marshal(auditData)
+    			if err != nil {
+        			fmt.Println(err)
+    			}
+
+    			err = myCache.Set("AuditData", js, time.Duration(cacheTime) * time.Minute).Err()
+    			if err != nil {
+        			fmt.Println(err)
+   	     		}
+
+			fmt.Println("Not using")
 			MainHandler(w, r, adjustedConf, auditData, basePath)
-		} else {
+			} else {
+				val := myCache.Get("AuditData")
+				var auditData  *validator.AuditData
+   		 		json.Unmarshal([]byte(val.Val()), &auditData)
+			fmt.Println("Using")
 			MainHandler(w, r, adjustedConf, *auditData, basePath)
+		}
+		wg.Unlock()
+
+		} else   {
+			fmt.Println("Using cache")
+			MainHandler(w, r, adjustedConf, *auditDataCache, basePath)
 		}
 
 	})
@@ -253,7 +298,6 @@ func MainHandler(w http.ResponseWriter, r *http.Request, c config.Configuration,
 		Config:            c,
 	}
 	tmpl, err := GetBaseTemplate("main")
-	fmt.Println(tmpl)
 	if err != nil {
 		logrus.Printf("Error getting template data %v", err)
 		http.Error(w, "Error getting template data", 500)
